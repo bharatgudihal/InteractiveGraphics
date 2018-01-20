@@ -322,3 +322,5 @@ ASALocalRun/
 # MSBuild Binary and Structured Log
 *.binlog
 
+#External Libraries
+!InteractiveGraphics/Freeglut/**
