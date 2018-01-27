@@ -17,13 +17,11 @@ cy::TriMesh mesh;
 GLuint VAO, VBO;
 cy::GLSLProgram program;
 cy::Matrix4f mvp;
-cy::Matrix4f model;
+cy::Matrix4f model = cy::Matrix4f::MatrixTrans(cy::Point3f(0, 0, 0));
 cy::Matrix4f cameraRotation = cy::Matrix4f::MatrixRotationX(0);
-cy::Matrix4f cameraTranslation = cy::Matrix4f::MatrixTrans(cy::Point3f(0,0,-50.0f));
+cy::Matrix4f cameraTranslation = cy::Matrix4f::MatrixTrans(cy::Point3f(0,0,-5.0f));
 cy::Matrix4f projection = cy::Matrix4f::MatrixPerspective(0.785398f, WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100);
-bool isRightMouseActive = false;
 float lastRightMousePos;
-bool isLeftMouseActive = false;
 float lastLeftMousePosX;
 float lastLeftMousePosY;
 float rotationSpeed = 0.0174533f;
@@ -59,8 +57,8 @@ int main(int argc, char *argv)
 
 	//Mesh	
 	mesh.LoadFromFileObj("Assets/teapot.obj");
-	mesh.ComputeBoundingBox();
-	model = cy::Matrix4f::MatrixTrans((mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
+	//mesh.ComputeBoundingBox();
+	//model = cy::Matrix4f::MatrixTrans((mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
 	glewInit();	
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
@@ -105,11 +103,8 @@ void GetMouseInput(int button, int state, int xmouse, int ymouse) {
 	pressedButton = button;
 	if (GLUT_LEFT_BUTTON == button) {
 		if (state == GLUT_DOWN) {
-			if (!isLeftMouseActive) {
-				isLeftMouseActive = true;
-				lastLeftMousePosX = static_cast<float>(xmouse);
-				lastLeftMousePosY = static_cast<float>(ymouse);
-			}
+			lastLeftMousePosX = static_cast<float>(xmouse);
+			lastLeftMousePosY = static_cast<float>(ymouse);
 		}
 		else {
 			lastLeftMousePosX = static_cast<float>(xmouse);
@@ -118,13 +113,7 @@ void GetMouseInput(int button, int state, int xmouse, int ymouse) {
 	}
 	else {
 		if (state == GLUT_DOWN) {
-			if (!isRightMouseActive) {
-				isRightMouseActive = true;
-				lastRightMousePos = static_cast<float>(ymouse);
-			}
-		}
-		else {
-			//lastRightMousePos = static_cast<float>(ymouse);
+			lastRightMousePos = static_cast<float>(ymouse);
 		}
 	}
 }
@@ -142,7 +131,7 @@ void GetMousePosition(int x, int y) {
 	else {
 		float diff = static_cast<float>(y) - lastRightMousePos;
 		lastRightMousePos = static_cast<float>(y);
-		cameraTranslation.AddTrans(cy::Point3f(0.0f, 0.0f, diff));
+		cameraTranslation.AddTrans(-cy::Point3f(0.0f, 0.0f, diff));
 	}
 }
 
