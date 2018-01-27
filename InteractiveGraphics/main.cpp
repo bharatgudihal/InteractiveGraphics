@@ -20,6 +20,7 @@ cy::Matrix4f mvp;
 cy::Matrix4f model = cy::Matrix4f::MatrixTrans(cy::Point3f(0, 0, 0));
 cy::Matrix4f cameraRotation = cy::Matrix4f::MatrixRotationX(0);
 cy::Matrix4f cameraTranslation = cy::Matrix4f::MatrixTrans(cy::Point3f(0,0,-5.0f));
+bool isProjection = true;
 cy::Matrix4f projection = cy::Matrix4f::MatrixPerspective(0.785398f, WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100);
 float lastRightMousePos;
 float lastLeftMousePosX;
@@ -37,6 +38,7 @@ void GetKeyboardInput(unsigned char key, int xmouse, int ymouse);
 void GetKeySpecial(int key, int xmouse, int ymouse);
 void GetMouseInput(int button, int state, int xmouse, int ymouse);
 void GetMousePosition(int x, int y);
+void TogglePerspective();
 
 int main(int argc, char *argv)
 {
@@ -57,8 +59,8 @@ int main(int argc, char *argv)
 
 	//Mesh	
 	mesh.LoadFromFileObj("Assets/teapot.obj");
-	//mesh.ComputeBoundingBox();
-	//model = cy::Matrix4f::MatrixTrans((mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
+	mesh.ComputeBoundingBox();
+	model = cy::Matrix4f::MatrixTrans(-(mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
 	glewInit();	
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
@@ -90,6 +92,9 @@ void Idle() {
 void GetKeyboardInput(unsigned char key, int xmouse, int ymouse) {
 	if (key == 27) {
 		glutLeaveMainLoop();
+	}
+	if (key == 112) {
+		TogglePerspective();
 	}
 }
 
@@ -139,4 +144,14 @@ void CompileShaders() {
 	vertexShader.CompileFile("Assets/Shaders/Vertex/mesh.glsl", GL_VERTEX_SHADER);
 	fragmentShader.CompileFile("Assets/Shaders/Fragment/mesh.glsl", GL_FRAGMENT_SHADER);
 	program.Build(&vertexShader, &fragmentShader);
+}
+
+void TogglePerspective() {
+	if (isProjection) {
+		projection = cy::Matrix4f::MatrixScale( 1 / cameraTranslation.GetTrans().Length());
+	}
+	else {
+		projection = cy::Matrix4f::MatrixPerspective(0.785398f, WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100);
+	}
+	isProjection = !isProjection;
 }
