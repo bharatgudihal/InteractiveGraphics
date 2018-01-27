@@ -17,8 +17,9 @@ cy::TriMesh mesh;
 GLuint VAO, VBO;
 cy::GLSLProgram program;
 cy::Matrix4f mvp;
+cy::Matrix4f model;
 cy::Matrix4f cameraRotation = cy::Matrix4f::MatrixRotationX(0);
-cy::Matrix4f cameraTranslation = cy::Matrix4f::MatrixTrans(cy::Point3f(0,0,-5.0f));
+cy::Matrix4f cameraTranslation = cy::Matrix4f::MatrixTrans(cy::Point3f(0,0,-50.0f));
 cy::Matrix4f projection = cy::Matrix4f::MatrixPerspective(0.785398f, WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100);
 bool isRightMouseActive = false;
 float lastRightMousePos;
@@ -35,6 +36,7 @@ void CompileShaders();
 void Display();
 void Idle();
 void GetKeyboardInput(unsigned char key, int xmouse, int ymouse);
+void GetKeySpecial(int key, int xmouse, int ymouse);
 void GetMouseInput(int button, int state, int xmouse, int ymouse);
 void GetMousePosition(int x, int y);
 
@@ -53,9 +55,12 @@ int main(int argc, char *argv)
 	glutKeyboardFunc(GetKeyboardInput);
 	glutMouseFunc(GetMouseInput);
 	glutMotionFunc(GetMousePosition);
+	glutSpecialFunc(GetKeySpecial);
 
 	//Mesh	
 	mesh.LoadFromFileObj("Assets/teapot.obj");
+	mesh.ComputeBoundingBox();
+	model = cy::Matrix4f::MatrixTrans((mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
 	glewInit();	
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
@@ -72,7 +77,7 @@ int main(int argc, char *argv)
 void Display() {
 	glClear(GL_COLOR_BUFFER_BIT);
 	glClearColor(color.r, color.g, color.b, color.a);
-	mvp = projection * cameraTranslation * cameraRotation;
+	mvp = projection * cameraTranslation * cameraRotation * model;
 	program.Bind();
 	program.SetUniformMatrix4("mvp", mvp.data);
 	glBindVertexArray(VAO);
@@ -88,6 +93,9 @@ void GetKeyboardInput(unsigned char key, int xmouse, int ymouse) {
 	if (key == 27) {
 		glutLeaveMainLoop();
 	}
+}
+
+void GetKeySpecial(int key, int xmouse, int ymouse) {
 	if (key == GLUT_KEY_F6) {
 		CompileShaders();
 	}
@@ -116,7 +124,7 @@ void GetMouseInput(int button, int state, int xmouse, int ymouse) {
 			}
 		}
 		else {
-			lastRightMousePos = static_cast<float>(ymouse);
+			//lastRightMousePos = static_cast<float>(ymouse);
 		}
 	}
 }
