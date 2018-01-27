@@ -60,15 +60,16 @@ int main(int argc, char *argv)
 	//Mesh	
 	mesh.LoadFromFileObj("Assets/teapot.obj");
 	mesh.ComputeBoundingBox();
+	//Adjust model to accomodate bounding box at 0,0,0
 	model = cy::Matrix4f::MatrixTrans(-(mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
 	glewInit();	
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
-	glBindVertexArray(VAO);	
+	glBindVertexArray(VAO);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(GL_ARRAY_BUFFER, mesh.NV() * sizeof(cy::Point3f), &mesh.V(0), GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);	
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 	CompileShaders();
 
 	glutMainLoop();
