@@ -78,7 +78,8 @@ int main(int argc, char *argv)
 void Display() {
 	glClear(GL_COLOR_BUFFER_BIT);
 	glClearColor(color.r, color.g, color.b, color.a);
-	mvp = projection * cameraTranslation * cameraRotation * model;
+	cy::Matrix4f view = cameraTranslation * cameraRotation;
+	mvp = projection * view * model;
 	program.Bind();
 	program.SetUniformMatrix4("mvp", mvp.data);
 	glBindVertexArray(VAO);
