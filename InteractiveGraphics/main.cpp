@@ -6,6 +6,7 @@
 #include <cyTriMesh.h>
 #include <cyGL.h>
 #include <cyMatrix.h>
+#include <iostream>
 
 struct {
 	float r, g, b, a;
@@ -40,13 +41,13 @@ void GetMouseInput(int button, int state, int xmouse, int ymouse);
 void GetMousePosition(int x, int y);
 void TogglePerspective();
 
-int main(int argc, char *argv)
+int main(int argc, char *argv[])
 {
 	
 	
 	color = { 0.0f,0.0f,0.0f,0.0f };
 
-	glutInit(&argc, &argv);
+	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_DEPTH | GLUT_RGBA);
 	glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
 	glutCreateWindow("Test");
@@ -57,22 +58,35 @@ int main(int argc, char *argv)
 	glutMotionFunc(GetMousePosition);
 	glutSpecialFunc(GetKeySpecial);
 
-	//Mesh	
-	mesh.LoadFromFileObj("Assets/teapot.obj");
-	mesh.ComputeBoundingBox();
-	//Adjust model to accomodate bounding box at 0,0,0
-	model = cy::Matrix4f::MatrixTrans(-(mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
-	glewInit();	
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	glBindVertexArray(VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, mesh.NV() * sizeof(cy::Point3f), &mesh.V(0), GL_STATIC_DRAW);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-	CompileShaders();
+	//Mesh
+	char* filePath;
+	if (argc > 1) {		
+		filePath = argv[1];
+		std::cout << "Loading file " << filePath << std::endl;
+	}
+	else {
+		filePath = "Assets/teapot.obj";
+	}
+	if (mesh.LoadFromFileObj(filePath)) {
+		
+		mesh.ComputeBoundingBox();
+		//Adjust model to accomodate bounding box at 0,0,0
+		model = cy::Matrix4f::MatrixTrans(-(mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
+		glewInit();
+		glGenVertexArrays(1, &VAO);
+		glGenBuffers(1, &VBO);
+		glBindVertexArray(VAO);
+		glBindBuffer(GL_ARRAY_BUFFER, VBO);
+		glBufferData(GL_ARRAY_BUFFER, mesh.NV() * sizeof(cy::Point3f), &mesh.V(0), GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+		CompileShaders();
 
-	glutMainLoop();
+		glutMainLoop();
+	}
+	else {
+		std::cerr << "File not found" << std::endl;
+	}
 }
 
 void Display() {
