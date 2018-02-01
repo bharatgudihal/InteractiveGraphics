@@ -14,15 +14,15 @@ struct {
 
 const int WINDOW_WIDTH = 800;
 const int WINDOW_HEIGHT = 600;
-cy::TriMesh mesh;
+cyTriMesh mesh;
 GLuint VAO, VBO;
-cy::GLSLProgram program;
-cy::Matrix4f mvp;
-cy::Matrix4f model = cy::Matrix4f::MatrixTrans(cy::Point3f(0, 0, 0));
-cy::Matrix4f cameraRotation = cy::Matrix4f::MatrixRotationX(0);
-cy::Matrix4f cameraTranslation = cy::Matrix4f::MatrixTrans(cy::Point3f(0,0,-5.0f));
+cyGLSLProgram program;
+cyMatrix4f mvp;
+cyMatrix4f model = cyMatrix4f::MatrixTrans(cyPoint3f(0, 0, 0));
+cyMatrix4f cameraRotation = cyMatrix4f::MatrixRotationX(0);
+cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,0,-5.0f));
 bool isProjection = true;
-cy::Matrix4f projection = cy::Matrix4f::MatrixPerspective(0.785398f, WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100);
+cyMatrix4f projection = cyMatrix4f::MatrixPerspective(0.785398f, WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100);
 float lastRightMousePos;
 float lastLeftMousePosX;
 float lastLeftMousePosY;
@@ -30,8 +30,8 @@ float rotationSpeed = 0.0174533f;
 float xRot = 0.0f;
 float yRot = 0.0f;
 int pressedButton;
-cy::GLSLShader vertexShader;	
-cy::GLSLShader fragmentShader;
+cyGLSLShader vertexShader;	
+cyGLSLShader fragmentShader;
 void CompileShaders();
 void Display();
 void Idle();
@@ -71,18 +71,27 @@ int main(int argc, char *argv[])
 		
 		mesh.ComputeBoundingBox();
 		//Adjust model to accomodate bounding box at 0,0,0
-		model = cy::Matrix4f::MatrixTrans(-(mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
+		model = cyMatrix4f::MatrixTrans(-(mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
+		cyPoint3f* vertices = new cyPoint3f[mesh.NF() * 3];
+		for (unsigned int i = 0; i < mesh.NF(); i++) {
+			cyTriMesh::TriFace face = mesh.F(i);
+			unsigned int vertexIndex = i * 3;
+			vertices[vertexIndex] = mesh.V(face.v[0]);
+			vertices[vertexIndex + 1] = mesh.V(face.v[1]);
+			vertices[vertexIndex + 2] = mesh.V(face.v[2]);
+		}
 		glewInit();
 		glGenVertexArrays(1, &VAO);
 		glGenBuffers(1, &VBO);
 		glBindVertexArray(VAO);
 		glBindBuffer(GL_ARRAY_BUFFER, VBO);
-		glBufferData(GL_ARRAY_BUFFER, mesh.NV() * sizeof(cy::Point3f), &mesh.V(0), GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, mesh.NF() * 3 * sizeof(cyPoint3f), vertices, GL_STATIC_DRAW);
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 		CompileShaders();
+		delete[] vertices;
 
-		glutMainLoop();
+		glutMainLoop();		
 	}
 	else {
 		std::cerr << "File not found" << std::endl;
@@ -97,7 +106,7 @@ void Display() {
 	program.Bind();
 	program.SetUniformMatrix4("mvp", mvp.data);
 	glBindVertexArray(VAO);
-	glDrawArrays(GL_POINTS, 0, mesh.NV());
+	glDrawArrays(GL_TRIANGLES, 0, mesh.NF() * 3);
 	glutSwapBuffers();
 }
 
@@ -152,7 +161,7 @@ void GetMousePosition(int x, int y) {
 	else {
 		float diff = static_cast<float>(y) - lastRightMousePos;
 		lastRightMousePos = static_cast<float>(y);
-		cameraTranslation.AddTrans(-cy::Point3f(0.0f, 0.0f, diff));
+		cameraTranslation.AddTrans(-cyPoint3f(0.0f, 0.0f, diff));
 	}
 }
 
@@ -164,10 +173,10 @@ void CompileShaders() {
 
 void TogglePerspective() {
 	if (isProjection) {
-		projection = cy::Matrix4f::MatrixScale( 1 / cameraTranslation.GetTrans().Length());
+		projection = cyMatrix4f::MatrixScale( 1 / cameraTranslation.GetTrans().Length());
 	}
 	else {
-		projection = cy::Matrix4f::MatrixPerspective(0.785398f, WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100);
+		projection = cyMatrix4f::MatrixPerspective(0.785398f, WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100);
 	}
 	isProjection = !isProjection;
 }
