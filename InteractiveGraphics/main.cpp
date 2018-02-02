@@ -18,9 +18,9 @@ struct VertexData{
 };
 
 struct Material {
-	cyPoint3f ambientColor;
-	cyPoint3f diffuseColor;
-	cyPoint3f specularColor;
+	cyPoint3f ambient;
+	cyPoint3f diffuse;
+	cyPoint3f specular;
 	float shininess;
 };
 
@@ -35,7 +35,7 @@ cyGLSLProgram program;
 cyMatrix4f mvp;
 cyMatrix4f model = cyMatrix4f::MatrixTrans(cyPoint3f(0, 0, 0));
 cyMatrix4f cameraRotation = cyMatrix4f::MatrixRotationX(0);
-cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,0,-5.0f));
+cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,0,-70.0f));
 bool isProjection = true;
 cyMatrix4f projection = cyMatrix4f::MatrixPerspective(FOV, WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
 float lastRightMousePos;
@@ -48,13 +48,17 @@ int pressedButton;
 cyGLSLShader vertexShader;	
 cyGLSLShader fragmentShader;
 Material material;
-cyPoint3f lightPosition(10.0f, 10.0f, -10.0f);
+cyPoint3f lightPosition(70.0f, 70.0f, 70.0f);
+bool isLightRotating;
+float xLightRot = 0.0f;
+float yLightRot = 0.0f;
 
 void CompileShaders();
 void Display();
 void Idle();
 void GetKeyboardInput(unsigned char key, int xmouse, int ymouse);
 void GetKeySpecial(int key, int xmouse, int ymouse);
+void GetKeyUpSpecial(int key, int xmouse, int ymouse);
 void GetMouseInput(int button, int state, int xmouse, int ymouse);
 void GetMousePosition(int x, int y);
 void TogglePerspective();
@@ -75,6 +79,7 @@ int main(int argc, char *argv[])
 	glutMouseFunc(GetMouseInput);
 	glutMotionFunc(GetMousePosition);
 	glutSpecialFunc(GetKeySpecial);
+	glutSpecialUpFunc(GetKeyUpSpecial);
 	glEnable(GL_DEPTH_TEST);
 
 	//Mesh
@@ -90,7 +95,7 @@ int main(int argc, char *argv[])
 		
 		mesh.ComputeBoundingBox();
 		//Adjust model to accomodate bounding box at 0,0,0
-		model = cyMatrix4f::MatrixTrans(-(mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);		
+		model = cyMatrix4f::MatrixRotationX(-1.5708f) * cyMatrix4f::MatrixTrans(-(mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
 		if (!mesh.HasNormals()) {
 			mesh.ComputeNormals();
 		}
@@ -122,8 +127,10 @@ int main(int argc, char *argv[])
 		CompileShaders();
 		delete[] vertices;
 
-		material.ambientColor = cyPoint3f(1.0f, 0.0f, 0.0f);
-		material.diffuseColor = cyPoint3f(1.0f, 0.0f, 0.0f);
+		material.ambient = cyPoint3f(1.0f, 0.0f, 0.0f);
+		material.diffuse = cyPoint3f(1.0f, 0.0f, 0.0f);
+		material.specular = cyPoint3f(1.0f, 1.0f, 1.0f);
+		material.shininess = 50.0f;
 
 		glutMainLoop();		
 	}
@@ -137,13 +144,21 @@ void Display() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	cyMatrix4f view = cameraTranslation * cameraRotation;
 	mvp = projection * view * model;
-	cyMatrix3f cameraMatrix = view.GetSubMatrix3() * model.GetSubMatrix3();
+	cyMatrix3f cameraMatrix = (view * model).GetSubMatrix3();	
+	cyPoint3f transformedLightPos = view.GetSubMatrix3() * lightPosition;
+	program.Bind();
+	program.SetUniformMatrix4("mvp", mvp.data);	
+	program.SetUniformMatrix3("cameraMatrix", cameraMatrix.data);
 	cameraMatrix.Invert();
 	cameraMatrix.Transpose();
-	program.Bind();
-	program.SetUniformMatrix4("mvp", mvp.data);
 	program.SetUniformMatrix3("normalMatrix", cameraMatrix.data);
-	program.SetUniform("lightPosition", lightPosition.x, lightPosition.y, lightPosition.z);
+	program.SetUniform("lightPosition", transformedLightPos.x, transformedLightPos.y, transformedLightPos.z);
+	program.SetUniform("ambient", material.ambient.x, material.ambient.y, material.ambient.z);
+	program.SetUniform("diffuse", material.diffuse.x, material.diffuse.y, material.diffuse.z);
+	program.SetUniform("specular", material.specular.x, material.specular.y, material.specular.z);
+	program.SetUniform("shininess", material.shininess);
+	cyPoint3f cameraPosition = view.GetTrans();
+	std::cout << cameraPosition.x << " " << cameraPosition.y << " " << cameraPosition.z << std::endl;
 	glBindVertexArray(VAO);
 	glDrawArrays(GL_TRIANGLES, 0, mesh.NF() * 3);
 	glutSwapBuffers();
@@ -163,8 +178,20 @@ void GetKeyboardInput(unsigned char key, int xmouse, int ymouse) {
 }
 
 void GetKeySpecial(int key, int xmouse, int ymouse) {
+	
 	if (key == GLUT_KEY_F6) {
 		CompileShaders();
+	}
+
+	if (key == GLUT_KEY_CTRL_L || key == GLUT_KEY_CTRL_R) {
+
+	}
+}
+
+void GetKeyUpSpecial(int key, int xmouse, int ymouse) {
+
+	if (key == GLUT_KEY_CTRL_L || key == GLUT_KEY_CTRL_R) {
+
 	}
 }
 
