@@ -144,21 +144,23 @@ void Display() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	cyMatrix4f view = cameraTranslation * cameraRotation;
 	mvp = projection * view * model;
-	cyMatrix3f cameraMatrix = (view * model).GetSubMatrix3();	
-	cyPoint3f transformedLightPos = view.GetSubMatrix3() * lightPosition;
+	cyMatrix3f worldMatrix = model.GetSubMatrix3();
+	cyMatrix4f worldToModel = model.GetInverse() * cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);
+	cyMatrix4f rotatedMatrix = worldToModel * cyMatrix4f::MatrixTrans(lightPosition);
+	cyMatrix4f lightModelMatrix = model * rotatedMatrix;
+	cyPoint3f transformedLightPos = lightModelMatrix.GetTrans();
 	program.Bind();
 	program.SetUniformMatrix4("mvp", mvp.data);	
-	program.SetUniformMatrix3("cameraMatrix", cameraMatrix.data);
-	cameraMatrix.Invert();
-	cameraMatrix.Transpose();
-	program.SetUniformMatrix3("normalMatrix", cameraMatrix.data);
+	program.SetUniformMatrix3("worldMatrix", worldMatrix.data);
+	worldMatrix.Invert();
+	worldMatrix.Transpose();
+	program.SetUniformMatrix3("normalMatrix", worldMatrix.data);
 	program.SetUniform("lightPosition", transformedLightPos.x, transformedLightPos.y, transformedLightPos.z);
 	program.SetUniform("ambient", material.ambient.x, material.ambient.y, material.ambient.z);
 	program.SetUniform("diffuse", material.diffuse.x, material.diffuse.y, material.diffuse.z);
 	program.SetUniform("specular", material.specular.x, material.specular.y, material.specular.z);
 	program.SetUniform("shininess", material.shininess);
 	cyPoint3f cameraPosition = view.GetTrans();
-	std::cout << cameraPosition.x << " " << cameraPosition.y << " " << cameraPosition.z << std::endl;
 	glBindVertexArray(VAO);
 	glDrawArrays(GL_TRIANGLES, 0, mesh.NF() * 3);
 	glutSwapBuffers();
@@ -184,14 +186,14 @@ void GetKeySpecial(int key, int xmouse, int ymouse) {
 	}
 
 	if (key == GLUT_KEY_CTRL_L || key == GLUT_KEY_CTRL_R) {
-
+		isLightRotating = true;
 	}
 }
 
 void GetKeyUpSpecial(int key, int xmouse, int ymouse) {
 
 	if (key == GLUT_KEY_CTRL_L || key == GLUT_KEY_CTRL_R) {
-
+		isLightRotating = false;
 	}
 }
 
@@ -220,9 +222,14 @@ void GetMousePosition(int x, int y) {
 		lastLeftMousePosX = static_cast<float>(x);
 		float yDiff = (y - lastLeftMousePosY) * rotationSpeed;
 		lastLeftMousePosY = static_cast<float>(y);
-		yRot += xDiff;
-		xRot += yDiff;
-		cameraRotation = cameraRotation.MatrixRotationY(yRot) * cameraRotation.MatrixRotationX(xRot);
+		if (isLightRotating) {
+			yLightRot += xDiff;
+			xLightRot += yDiff;
+		}else{			
+			yRot += xDiff;
+			xRot += yDiff;
+			cameraRotation = cameraRotation.MatrixRotationY(yRot) * cameraRotation.MatrixRotationX(xRot);
+		}
 	}
 	else {
 		float diff = static_cast<float>(y) - lastRightMousePos;
