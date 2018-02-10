@@ -89,7 +89,7 @@ int main(int argc, char *argv[])
 		std::cout << "Loading file " << filePath << std::endl;
 	}
 	else {
-		filePath = "Assets/teapot.obj";
+		filePath = "Assets/Models/teapot/teapot.obj";
 	}
 	if (mesh.LoadFromFileObj(filePath)) {
 		
