@@ -99,7 +99,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ExternalsDir)\freeglut\include;$(ExternalsDir)\cyCodeBase;$(ExternalsDir)\glew\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ExternalsDir)\freeglut\include;$(ExternalsDir)\cyCodeBase;$(ExternalsDir)\glew\include;$(ExternalsDir)\LodePNG;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -121,7 +121,7 @@ call $(ProjectDir)CopyScript.bat "$(ExternalsDir)\glew\bin\Release\$(Platform)\g
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ExternalsDir)\freeglut\include;$(ExternalsDir)\cyCodeBase;$(ExternalsDir)\glew\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ExternalsDir)\freeglut\include;$(ExternalsDir)\cyCodeBase;$(ExternalsDir)\glew\include;$(ExternalsDir)\LodePNG;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -146,7 +146,7 @@ call $(ProjectDir)CopyScript.bat "$(ExternalsDir)\glew\bin\Release\$(Platform)\g
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ExternalsDir)\freeglut\include;$(ExternalsDir)\cyCodeBase;$(ExternalsDir)\glew\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ExternalsDir)\freeglut\include;$(ExternalsDir)\cyCodeBase;$(ExternalsDir)\glew\include;$(ExternalsDir)\LodePNG;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -172,7 +172,7 @@ call $(ProjectDir)CopyScript.bat "$(ExternalsDir)\glew\bin\Release\$(Platform)\g
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ExternalsDir)\freeglut\include;$(ExternalsDir)\cyCodeBase;$(ExternalsDir)\glew\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ExternalsDir)\freeglut\include;$(ExternalsDir)\cyCodeBase;$(ExternalsDir)\glew\include;$(ExternalsDir)\LodePNG;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -190,6 +190,7 @@ call $(ProjectDir)CopyScript.bat "$(ExternalsDir)\glew\bin\Release\$(Platform)\g
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Externals\LodePNG\lodepng.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>

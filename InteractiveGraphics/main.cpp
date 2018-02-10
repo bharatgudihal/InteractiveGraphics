@@ -6,7 +6,9 @@
 #include <cyTriMesh.h>
 #include <cyGL.h>
 #include <cyMatrix.h>
+#include <lodepng.h>
 #include <iostream>
+#include <string>
 
 struct {
 	float r, g, b, a;
@@ -15,6 +17,7 @@ struct {
 struct VertexData{
 	cyPoint3f vertexPosition;
 	cyPoint3f vertexNormal;
+	cyPoint2f uv;
 };
 
 struct Material {
@@ -30,7 +33,7 @@ const float FOV = 0.785398f;
 const float NEAR_PLANE = 0.1f;
 const float FAR_PLANE = 1000.0f;
 cyTriMesh mesh;
-GLuint VAO, VBO;
+GLuint VAO, VBO, diffuseTextureId, specularTextureId;
 cyGLSLProgram program;
 cyMatrix4f mvp;
 cyMatrix4f model = cyMatrix4f::MatrixTrans(cyPoint3f(0, 0, 0));
@@ -64,8 +67,7 @@ void GetMousePosition(int x, int y);
 void TogglePerspective();
 
 int main(int argc, char *argv[])
-{
-	
+{	
 	
 	color = { 0.0f,0.0f,0.0f,0.0f };
 
@@ -81,6 +83,8 @@ int main(int argc, char *argv[])
 	glutSpecialFunc(GetKeySpecial);
 	glutSpecialUpFunc(GetKeyUpSpecial);
 	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_TEXTURE_2D);
+	glewInit();
 
 	//Mesh
 	char* filePath;
@@ -91,6 +95,8 @@ int main(int argc, char *argv[])
 	else {
 		filePath = "Assets/Models/teapot/teapot.obj";
 	}
+	std::string parentFolder(filePath);
+	parentFolder = parentFolder.substr(0, parentFolder.find_last_of("/")+1);
 	if (mesh.LoadFromFileObj(filePath)) {
 		
 		mesh.ComputeBoundingBox();
@@ -99,10 +105,15 @@ int main(int argc, char *argv[])
 		if (!mesh.HasNormals()) {
 			mesh.ComputeNormals();
 		}
+
+		//Extract all vertex data
 		VertexData* vertices = new VertexData[mesh.NF() * 3];
+		int a = mesh.NF();
+		int b = mesh.NVT();
 		for (unsigned int i = 0; i < mesh.NF(); i++) {
 			cyTriMesh::TriFace face = mesh.F(i);
 			cyTriMesh::TriFace normalFace = mesh.FN(i);
+			cyTriMesh::TriFace textureFace = mesh.FT(i);
 			unsigned int vertexIndex = i * 3;
 			vertices[vertexIndex].vertexPosition = mesh.V(face.v[0]);
 			vertices[vertexIndex + 1].vertexPosition = mesh.V(face.v[1]);
@@ -111,8 +122,12 @@ int main(int argc, char *argv[])
 			vertices[vertexIndex].vertexNormal = mesh.VN(normalFace.v[0]);
 			vertices[vertexIndex + 1].vertexNormal = mesh.VN(normalFace.v[1]);
 			vertices[vertexIndex + 2].vertexNormal = mesh.VN(normalFace.v[2]);
+
+			vertices[vertexIndex].uv = cyPoint2f(mesh.VT(textureFace.v[0]));
+			vertices[vertexIndex + 1].uv = cyPoint2f(mesh.VT(textureFace.v[1]));
+			vertices[vertexIndex + 2].uv = cyPoint2f(mesh.VT(textureFace.v[2]));
 		}
-		glewInit();
+						
 		glGenVertexArrays(1, &VAO);
 		glGenBuffers(1, &VBO);
 		glBindVertexArray(VAO);
@@ -124,8 +139,52 @@ int main(int argc, char *argv[])
 		// Position vertex attribute
 		glEnableVertexAttribArray(1);
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexNormal));
+		//UV
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, uv));
 		CompileShaders();
 		delete[] vertices;
+
+		//Get material information		
+		cyTriMesh::Mtl mat = mesh.M(0);
+		std::vector<unsigned char> imageBuffer;
+		std::string diffuseMap = parentFolder + std::string(mat.map_Kd.data);
+		unsigned width, height;
+		int result = lodepng::decode(imageBuffer, width, height, diffuseMap, LodePNGColorType::LCT_RGB);
+		if (result == 0) {
+			glGenTextures(1, &diffuseTextureId);
+			glBindTexture(GL_TEXTURE_2D, diffuseTextureId);
+
+			// Set texture wrapping params
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+			// Set texture filtering params
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, imageBuffer.data());
+			glGenerateMipmap(GL_TEXTURE_2D);
+		}
+
+		imageBuffer.clear();
+		std::string specularMap = parentFolder + std::string(mat.map_Ks.data);
+		result = lodepng::decode(imageBuffer, width, height, specularMap, LodePNGColorType::LCT_RGB);
+		if (result == 0) {
+			glGenTextures(1, &specularTextureId);
+			glBindTexture(GL_TEXTURE_2D, specularTextureId);
+
+			// Set texture wrapping params
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+			// Set texture filtering params
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, imageBuffer.data());
+			glGenerateMipmap(GL_TEXTURE_2D);
+		}
 
 		material.ambient = cyPoint3f(1.0f, 0.0f, 0.0f);
 		material.diffuse = cyPoint3f(1.0f, 0.0f, 0.0f);
@@ -148,6 +207,8 @@ void Display() {
 	cyMatrix4f worldToModel = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);
 	cyMatrix4f lightModelMatrix = worldToModel * cyMatrix4f::MatrixTrans(lightPosition);
 	cyPoint3f transformedLightPos = lightModelMatrix.GetTrans();
+	
+	//Set all shader params
 	program.Bind();
 	program.SetUniformMatrix4("mvp", mvp.data);	
 	program.SetUniformMatrix4("cameraMatrix", (view * model).data);
@@ -161,7 +222,18 @@ void Display() {
 	program.SetUniform("shininess", material.shininess);
 	cyPoint3f cameraPosition = view.GetTrans();
 	program.SetUniform("cameraPosition", cameraPosition);
-	glBindVertexArray(VAO);
+	
+	//Set active texture and bind
+	//Diffuse
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, diffuseTextureId);
+	
+	//Specular
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, specularTextureId);
+
+	//Draw mesh
+	glBindVertexArray(VAO);	
 	glDrawArrays(GL_TRIANGLES, 0, mesh.NF() * 3);
 	glutSwapBuffers();
 }
