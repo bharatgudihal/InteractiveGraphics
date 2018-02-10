@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
 		filePath = "Assets/Models/teapot/teapot.obj";
 	}
 	std::string parentFolder(filePath);
-	parentFolder = parentFolder.substr(0, parentFolder.find_last_of("/")+1);
+	parentFolder = parentFolder.substr(0, parentFolder.find_last_of("/") + 1);
 	if (mesh.LoadFromFileObj(filePath)) {
 		
 		mesh.ComputeBoundingBox();
@@ -108,8 +108,6 @@ int main(int argc, char *argv[])
 
 		//Extract all vertex data
 		VertexData* vertices = new VertexData[mesh.NF() * 3];
-		int a = mesh.NF();
-		int b = mesh.NVT();
 		for (unsigned int i = 0; i < mesh.NF(); i++) {
 			cyTriMesh::TriFace face = mesh.F(i);
 			cyTriMesh::TriFace normalFace = mesh.FN(i);
