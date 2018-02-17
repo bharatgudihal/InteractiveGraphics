@@ -27,20 +27,48 @@ struct Material {
 	float shininess;
 };
 
+//Constants
 const int WINDOW_WIDTH = 800;
 const int WINDOW_HEIGHT = 600;
 const float FOV = 0.785398f;
 const float NEAR_PLANE = 0.1f;
 const float FAR_PLANE = 1000.0f;
-cyTriMesh mesh;
-GLuint VAO, VBO, diffuseTextureId, specularTextureId;
-cyGLSLProgram program;
-cyMatrix4f mvp;
-cyMatrix4f model = cyMatrix4f::MatrixTrans(cyPoint3f(0, 0, 0));
+
+//Teapot model variables
+cyTriMesh teapotMesh;
+GLuint teapotVAO, teapotVBO, teapotDiffuseTextureId, teapotSpecularTextureId;
+cyGLSLShader teapotVertexShader, teapotFragmentShader;
+cyGLSLProgram teapotShaderProgram;
+Material teapotMaterial;
+cyMatrix4f teapotModelMatrix = cyMatrix4f::MatrixTrans(cyPoint3f(0, 0, 0));
+
+//Camera variables
 cyMatrix4f cameraRotation = cyMatrix4f::MatrixRotationX(0);
 cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,0,-70.0f));
 bool isProjection = true;
 cyMatrix4f projection = cyMatrix4f::MatrixPerspective(FOV, WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
+
+//Light variables
+cyPoint3f lightPosition(70.0f, 70.0f, 70.0f);
+bool isLightRotating;
+float xLightRot = 0.0f;
+float yLightRot = 0.0f;
+
+//Plane variables
+GLuint planeVAO, planeVBO, planeDiffuseTextureId;
+cyGLSLShader planeVertexShader, planeFragmentShader;
+cyGLSLProgram planeShaderProgram;
+cyMatrix4f planeModelMatrix;
+cyMatrix4f planeTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0, 0, -10.0f));
+bool isPlaneMoving;
+float xPlaneRot = 0.0f;
+float yPlaneRot = 0.0f;
+
+//Render texture variables
+cyGLRenderTexture2D renderTexture;
+
+//General variables
+cyMatrix4f mvp;
 float lastRightMousePos;
 float lastLeftMousePosX;
 float lastLeftMousePosY;
@@ -48,14 +76,8 @@ float rotationSpeed = 0.0174533f;
 float xRot = 0.0f;
 float yRot = 0.0f;
 int pressedButton;
-cyGLSLShader vertexShader;	
-cyGLSLShader fragmentShader;
-Material material;
-cyPoint3f lightPosition(70.0f, 70.0f, 70.0f);
-bool isLightRotating;
-float xLightRot = 0.0f;
-float yLightRot = 0.0f;
 
+//Callback functions
 void CompileShaders();
 void Display();
 void Idle();
@@ -71,22 +93,24 @@ int main(int argc, char *argv[])
 	
 	color = { 0.0f,0.0f,0.0f,0.0f };
 
-	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_DOUBLE | GLUT_DEPTH | GLUT_RGBA);
-	glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
-	glutCreateWindow("Test");
-	glutDisplayFunc(Display);
-	glutIdleFunc(Idle);
-	glutKeyboardFunc(GetKeyboardInput);
-	glutMouseFunc(GetMouseInput);
-	glutMotionFunc(GetMousePosition);
-	glutSpecialFunc(GetKeySpecial);
-	glutSpecialUpFunc(GetKeyUpSpecial);
-	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_TEXTURE_2D);
-	glewInit();
-
-	//Mesh
+	//Initialize window and opengl params
+	{
+		glutInit(&argc, argv);
+		glutInitDisplayMode(GLUT_DOUBLE | GLUT_DEPTH | GLUT_RGBA);
+		glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+		glutCreateWindow("Test");
+		glutDisplayFunc(Display);
+		glutIdleFunc(Idle);
+		glutKeyboardFunc(GetKeyboardInput);
+		glutMouseFunc(GetMouseInput);
+		glutMotionFunc(GetMousePosition);
+		glutSpecialFunc(GetKeySpecial);
+		glutSpecialUpFunc(GetKeyUpSpecial);
+		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_TEXTURE_2D);
+		glewInit();
+	}
+		
 	char* filePath;
 	if (argc > 1) {		
 		filePath = argv[1];
@@ -97,142 +121,252 @@ int main(int argc, char *argv[])
 	}
 	std::string parentFolder(filePath);
 	parentFolder = parentFolder.substr(0, parentFolder.find_last_of("/") + 1);
-	if (mesh.LoadFromFileObj(filePath)) {
+	
+	//Load primary mesh
+	if (teapotMesh.LoadFromFileObj(filePath)) {
 		
-		mesh.ComputeBoundingBox();
-		//Adjust model to accomodate bounding box at 0,0,0
-		model = cyMatrix4f::MatrixRotationX(-1.5708f) * cyMatrix4f::MatrixTrans(-(mesh.GetBoundMax() + mesh.GetBoundMin()) / 2.0f);
-		if (!mesh.HasNormals()) {
-			mesh.ComputeNormals();
+		//Teapot setup start
+		{
+			teapotMesh.ComputeBoundingBox();
+			//Adjust model to accommodate bounding box at 0,0,0
+			teapotModelMatrix = cyMatrix4f::MatrixRotationX(-1.5708f) * cyMatrix4f::MatrixTrans(-(teapotMesh.GetBoundMax() + teapotMesh.GetBoundMin()) / 2.0f);
+			if (!teapotMesh.HasNormals()) {
+				teapotMesh.ComputeNormals();
+			}
+
+			//Extract all vertex data
+			VertexData* vertices = new VertexData[teapotMesh.NF() * 3];
+			for (unsigned int i = 0; i < teapotMesh.NF(); i++) {
+				cyTriMesh::TriFace face = teapotMesh.F(i);
+				cyTriMesh::TriFace normalFace = teapotMesh.FN(i);
+				cyTriMesh::TriFace textureFace = teapotMesh.FT(i);
+				unsigned int vertexIndex = i * 3;
+				vertices[vertexIndex].vertexPosition = teapotMesh.V(face.v[0]);
+				vertices[vertexIndex + 1].vertexPosition = teapotMesh.V(face.v[1]);
+				vertices[vertexIndex + 2].vertexPosition = teapotMesh.V(face.v[2]);
+
+				vertices[vertexIndex].vertexNormal = teapotMesh.VN(normalFace.v[0]);
+				vertices[vertexIndex + 1].vertexNormal = teapotMesh.VN(normalFace.v[1]);
+				vertices[vertexIndex + 2].vertexNormal = teapotMesh.VN(normalFace.v[2]);
+
+				vertices[vertexIndex].uv = cyPoint2f(teapotMesh.VT(textureFace.v[0]));
+				vertices[vertexIndex + 1].uv = cyPoint2f(teapotMesh.VT(textureFace.v[1]));
+				vertices[vertexIndex + 2].uv = cyPoint2f(teapotMesh.VT(textureFace.v[2]));
+			}
+
+			glGenVertexArrays(1, &teapotVAO);
+			glGenBuffers(1, &teapotVBO);
+			glBindVertexArray(teapotVAO);
+			glBindBuffer(GL_ARRAY_BUFFER, teapotVBO);
+			glBufferData(GL_ARRAY_BUFFER, teapotMesh.NF() * 3 * sizeof(VertexData), vertices, GL_STATIC_DRAW);
+			// Position vertex attribute
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexPosition));
+			// Position vertex attribute
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexNormal));
+			//UV
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, uv));
+			
+			CompileShaders();
+			
+			delete[] vertices;
+
+			//Get material information		
+			cyTriMesh::Mtl mat = teapotMesh.M(0);
+			std::vector<unsigned char> imageBuffer;
+			std::string diffuseMap = parentFolder + std::string(mat.map_Kd.data);
+			unsigned width, height;
+			int result = lodepng::decode(imageBuffer, width, height, diffuseMap, LodePNGColorType::LCT_RGB);
+			if (result == 0) {
+				glGenTextures(1, &teapotDiffuseTextureId);
+				glBindTexture(GL_TEXTURE_2D, teapotDiffuseTextureId);
+
+				// Set texture wrapping params
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+				// Set texture filtering params
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, imageBuffer.data());
+				glGenerateMipmap(GL_TEXTURE_2D);
+			}
+
+			imageBuffer.clear();
+			std::string specularMap = parentFolder + std::string(mat.map_Ks.data);
+			result = lodepng::decode(imageBuffer, width, height, specularMap, LodePNGColorType::LCT_RGB);
+			if (result == 0) {
+				glGenTextures(1, &teapotSpecularTextureId);
+				glBindTexture(GL_TEXTURE_2D, teapotSpecularTextureId);
+
+				// Set texture wrapping params
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+				// Set texture filtering params
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, imageBuffer.data());
+				glGenerateMipmap(GL_TEXTURE_2D);
+			}
+
+			//Initialize material properties
+			teapotMaterial.ambient = cyPoint3f(1.0f, 0.0f, 0.0f);
+			teapotMaterial.diffuse = cyPoint3f(1.0f, 0.0f, 0.0f);
+			teapotMaterial.specular = cyPoint3f(1.0f, 1.0f, 1.0f);
+			teapotMaterial.shininess = 50.0f;
 		}
 
-		//Extract all vertex data
-		VertexData* vertices = new VertexData[mesh.NF() * 3];
-		for (unsigned int i = 0; i < mesh.NF(); i++) {
-			cyTriMesh::TriFace face = mesh.F(i);
-			cyTriMesh::TriFace normalFace = mesh.FN(i);
-			cyTriMesh::TriFace textureFace = mesh.FT(i);
-			unsigned int vertexIndex = i * 3;
-			vertices[vertexIndex].vertexPosition = mesh.V(face.v[0]);
-			vertices[vertexIndex + 1].vertexPosition = mesh.V(face.v[1]);
-			vertices[vertexIndex + 2].vertexPosition = mesh.V(face.v[2]);
+		//Setup plane
+		{
+			const float planeHalfWidth = 3.0f;
+			const float planeHalfHeight = 3.0f;
+			VertexData* vertices = new VertexData[6];
+			vertices[0].vertexPosition = cyPoint3f(-planeHalfWidth, -planeHalfHeight, 0.0f);
+			vertices[0].uv = cyPoint2f(0.0f, 0.0f);
+			vertices[1].vertexPosition = cyPoint3f(planeHalfWidth, -planeHalfHeight, 0.0f);
+			vertices[1].uv = cyPoint2f(1.0f, 0.0f);
+			vertices[2].vertexPosition = cyPoint3f(-planeHalfWidth, planeHalfHeight, 0.0f);
+			vertices[2].uv = cyPoint2f(0.0f, 1.0f);
+			vertices[3].vertexPosition = cyPoint3f(planeHalfWidth, -planeHalfHeight, 0.0f);
+			vertices[3].uv = cyPoint2f(1.0f, 0.0f);
+			vertices[4].vertexPosition = cyPoint3f(planeHalfWidth, planeHalfHeight, 0.0f);
+			vertices[4].uv = cyPoint2f(1.0f, 1.0f);
+			vertices[5].vertexPosition = cyPoint3f(-planeHalfWidth, planeHalfHeight, 0.0f);
+			vertices[5].uv = cyPoint2f(0.0f, 1.0f);
 
-			vertices[vertexIndex].vertexNormal = mesh.VN(normalFace.v[0]);
-			vertices[vertexIndex + 1].vertexNormal = mesh.VN(normalFace.v[1]);
-			vertices[vertexIndex + 2].vertexNormal = mesh.VN(normalFace.v[2]);
+			glGenVertexArrays(1, &planeVAO);
+			glGenBuffers(1, &planeVBO);
+			glBindVertexArray(planeVAO);
+			glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
+			glBufferData(GL_ARRAY_BUFFER, 6 * sizeof(VertexData), vertices, GL_STATIC_DRAW);
+			// Position vertex attribute
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexPosition));
+			// Position vertex attribute
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexNormal));
+			//UV
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, uv));
 
-			vertices[vertexIndex].uv = cyPoint2f(mesh.VT(textureFace.v[0]));
-			vertices[vertexIndex + 1].uv = cyPoint2f(mesh.VT(textureFace.v[1]));
-			vertices[vertexIndex + 2].uv = cyPoint2f(mesh.VT(textureFace.v[2]));
+			planeVertexShader.CompileFile("Assets/Shaders/Vertex/plane.glsl", GL_VERTEX_SHADER);
+			planeFragmentShader.CompileFile("Assets/Shaders/Fragment/plane.glsl", GL_FRAGMENT_SHADER);
+			planeShaderProgram.Build(&planeVertexShader, &planeFragmentShader);
+
+			delete[] vertices;
+		}		
+
+		//Setup render texture
+		{
+			const int numChannels = 3;			
+			renderTexture.Initialize(true, numChannels, WINDOW_WIDTH, WINDOW_HEIGHT);
+			//Bilinear filtering for magnification
+			renderTexture.SetTextureFilteringMode(GL_LINEAR, 0);
+			//Anisotropic filtering for minification
+			renderTexture.SetTextureMaxAnisotropy();
+			renderTexture.BuildTextureMipmaps();
 		}
-						
-		glGenVertexArrays(1, &VAO);
-		glGenBuffers(1, &VBO);
-		glBindVertexArray(VAO);
-		glBindBuffer(GL_ARRAY_BUFFER, VBO);
-		glBufferData(GL_ARRAY_BUFFER, mesh.NF() * 3 * sizeof(VertexData), vertices, GL_STATIC_DRAW);
-		// Position vertex attribute
-		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexPosition));
-		// Position vertex attribute
-		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexNormal));
-		//UV
-		glEnableVertexAttribArray(2);
-		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, uv));
-		CompileShaders();
-		delete[] vertices;
-
-		//Get material information		
-		cyTriMesh::Mtl mat = mesh.M(0);
-		std::vector<unsigned char> imageBuffer;
-		std::string diffuseMap = parentFolder + std::string(mat.map_Kd.data);
-		unsigned width, height;
-		int result = lodepng::decode(imageBuffer, width, height, diffuseMap, LodePNGColorType::LCT_RGB);
-		if (result == 0) {
-			glGenTextures(1, &diffuseTextureId);
-			glBindTexture(GL_TEXTURE_2D, diffuseTextureId);
-
-			// Set texture wrapping params
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-			// Set texture filtering params
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, imageBuffer.data());
-			glGenerateMipmap(GL_TEXTURE_2D);
-		}
-
-		imageBuffer.clear();
-		std::string specularMap = parentFolder + std::string(mat.map_Ks.data);
-		result = lodepng::decode(imageBuffer, width, height, specularMap, LodePNGColorType::LCT_RGB);
-		if (result == 0) {
-			glGenTextures(1, &specularTextureId);
-			glBindTexture(GL_TEXTURE_2D, specularTextureId);
-
-			// Set texture wrapping params
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-			// Set texture filtering params
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, imageBuffer.data());
-			glGenerateMipmap(GL_TEXTURE_2D);
-		}
-
-		material.ambient = cyPoint3f(1.0f, 0.0f, 0.0f);
-		material.diffuse = cyPoint3f(1.0f, 0.0f, 0.0f);
-		material.specular = cyPoint3f(1.0f, 1.0f, 1.0f);
-		material.shininess = 50.0f;
 
 		glutMainLoop();		
+
+		//Cleanup
+		renderTexture.Delete();
 	}
 	else {
 		std::cerr << "File not found" << std::endl;
 	}
 }
 
-void Display() {	
+void Display() {
+
+	//Set clear color
 	glClearColor(color.r, color.g, color.b, color.a);
+
+	//Bind render texture
+	{
+		renderTexture.Bind();
+	}
+
+	//Clear buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	cyMatrix4f view = cameraTranslation * cameraRotation;
-	mvp = projection * view * model;
-	cyMatrix3f cameraMatrix = (view * model).GetSubMatrix3();
+	
+	//Setup matrices for teapot
+	const cyMatrix4f view = cameraTranslation * cameraRotation;
+	mvp = projection * view * teapotModelMatrix;
+	cyMatrix3f cameraMatrix = (view * teapotModelMatrix).GetSubMatrix3();
 	cyMatrix4f worldToModel = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);
 	cyMatrix4f lightModelMatrix = worldToModel * cyMatrix4f::MatrixTrans(lightPosition);
 	cyPoint3f transformedLightPos = lightModelMatrix.GetTrans();
-	
-	//Set all shader params
-	program.Bind();
-	program.SetUniformMatrix4("mvp", mvp.data);	
-	program.SetUniformMatrix4("cameraMatrix", (view * model).data);
-	cameraMatrix.Invert();
-	cameraMatrix.Transpose();
-	program.SetUniformMatrix3("normalMatrix", cameraMatrix.data);
-	program.SetUniform("lightPosition", transformedLightPos);
-	program.SetUniform("ambient", material.ambient);
-	program.SetUniform("diffuse", material.diffuse);
-	program.SetUniform("specular", material.specular);
-	program.SetUniform("shininess", material.shininess);
 	cyPoint3f cameraPosition = view.GetTrans();
-	program.SetUniform("cameraPosition", cameraPosition);
 	
-	//Set active texture and bind
-	//Diffuse
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, diffuseTextureId);
+	//Set all shader params for teapot
+	{
+		teapotShaderProgram.Bind();
+		teapotShaderProgram.SetUniformMatrix4("mvp", mvp.data);
+		teapotShaderProgram.SetUniformMatrix4("cameraMatrix", (view * teapotModelMatrix).data);
+		cameraMatrix.Invert();
+		cameraMatrix.Transpose();
+		teapotShaderProgram.SetUniformMatrix3("normalMatrix", cameraMatrix.data);
+		teapotShaderProgram.SetUniform("lightPosition", transformedLightPos);
+		teapotShaderProgram.SetUniform("ambient", teapotMaterial.ambient);
+		teapotShaderProgram.SetUniform("diffuse", teapotMaterial.diffuse);
+		teapotShaderProgram.SetUniform("specular", teapotMaterial.specular);
+		teapotShaderProgram.SetUniform("shininess", teapotMaterial.shininess);
+		teapotShaderProgram.SetUniform("cameraPosition", cameraPosition);
+	}
 	
-	//Specular
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, specularTextureId);
+	//Set active texture and bind for teapot
+	{
+		//Diffuse
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, teapotDiffuseTextureId);
 
-	//Draw mesh
-	glBindVertexArray(VAO);	
-	glDrawArrays(GL_TRIANGLES, 0, mesh.NF() * 3);
+		//Specular
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, teapotSpecularTextureId);
+	}	
+
+	//Draw teapot
+	{
+		glBindVertexArray(teapotVAO);
+		glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
+	}
+
+	//Unbind render texture
+	{		
+		renderTexture.Unbind();
+	}
+
+	//Clear main render target buffers
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	//mvp for plane
+	planeModelMatrix = planeTranslation * cyMatrix4f::MatrixRotationY(yPlaneRot) * cyMatrix4f::MatrixRotationX(xPlaneRot);
+	mvp = projection * planeModelMatrix;
+
+	//Bind shader for plane
+	{
+		planeShaderProgram.Bind();
+		planeShaderProgram.SetUniformMatrix4("mvp", mvp.data);
+	}
+
+	//Bind texture for plane
+	{
+		glActiveTexture(GL_TEXTURE0);
+		renderTexture.BindTexture();
+	}
+
+	//Draw plane
+	{
+		glBindVertexArray(planeVAO);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+	}
+
 	glutSwapBuffers();
 }
 
@@ -258,12 +392,20 @@ void GetKeySpecial(int key, int xmouse, int ymouse) {
 	if (key == GLUT_KEY_CTRL_L || key == GLUT_KEY_CTRL_R) {
 		isLightRotating = true;
 	}
+
+	if (key == GLUT_KEY_ALT_L || key == GLUT_KEY_ALT_R) {
+		isPlaneMoving = true;
+	}
 }
 
 void GetKeyUpSpecial(int key, int xmouse, int ymouse) {
 
 	if (key == GLUT_KEY_CTRL_L || key == GLUT_KEY_CTRL_R) {
 		isLightRotating = false;
+	}
+
+	if (key == GLUT_KEY_ALT_L || key == GLUT_KEY_ALT_R) {
+		isPlaneMoving = false;
 	}
 }
 
@@ -295,23 +437,31 @@ void GetMousePosition(int x, int y) {
 		if (isLightRotating) {
 			yLightRot += xDiff;
 			xLightRot += yDiff;
+		}
+		else if (isPlaneMoving) {
+			yPlaneRot += xDiff;
+			xPlaneRot += yDiff;
 		}else{			
 			yRot += xDiff;
 			xRot += yDiff;
 			cameraRotation = cameraRotation.MatrixRotationY(yRot) * cameraRotation.MatrixRotationX(xRot);
 		}
-	}
-	else {
+	}else {
 		float diff = static_cast<float>(y) - lastRightMousePos;
 		lastRightMousePos = static_cast<float>(y);
-		cameraTranslation.AddTrans(-cyPoint3f(0.0f, 0.0f, diff));
+		if (isPlaneMoving) {
+			planeTranslation.AddTrans(-cyPoint3f(0.0f, 0.0f, diff));
+		}
+		else {
+			cameraTranslation.AddTrans(-cyPoint3f(0.0f, 0.0f, diff));
+		}
 	}
 }
 
 void CompileShaders() {
-	vertexShader.CompileFile("Assets/Shaders/Vertex/mesh.glsl", GL_VERTEX_SHADER);
-	fragmentShader.CompileFile("Assets/Shaders/Fragment/mesh.glsl", GL_FRAGMENT_SHADER);
-	program.Build(&vertexShader, &fragmentShader);
+	teapotVertexShader.CompileFile("Assets/Shaders/Vertex/teapot.glsl", GL_VERTEX_SHADER);
+	teapotFragmentShader.CompileFile("Assets/Shaders/Fragment/teapot.glsl", GL_FRAGMENT_SHADER);
+	teapotShaderProgram.Build(&teapotVertexShader, &teapotFragmentShader);
 }
 
 void TogglePerspective() {
