@@ -324,3 +324,6 @@ ASALocalRun/
 
 #External Libraries
 !InteractiveGraphics/Freeglut/**
+
+#Assets
+!InteractiveGraphics/Assets/**

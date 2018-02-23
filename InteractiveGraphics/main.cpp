@@ -77,6 +77,11 @@ float xRot = 0.0f;
 float yRot = 0.0f;
 int pressedButton;
 
+//Cube map variables
+GLuint cubeVAO, cubeVBO, cubeMapId;
+cyGLSLShader cubeVertexShader, cubeFragmentShader;
+cyGLSLProgram cubeShaderProgram;
+
 //Callback functions
 void CompileShaders();
 void Display();
