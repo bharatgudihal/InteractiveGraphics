@@ -30,10 +30,10 @@ struct Material {
 //Constants
 const int WINDOW_WIDTH = 800;
 const int WINDOW_HEIGHT = 600;
+const float ASPECT_RATIO = WINDOW_WIDTH / (float)WINDOW_HEIGHT;
 const float FOV = 0.785398f;
 const float NEAR_PLANE = 0.1f;
 const float FAR_PLANE = 1000.0f;
-const float CUBE_MAP_MESH_SIZE = 500.0f;
 
 //Teapot model variables
 cyTriMesh teapotMesh;
@@ -49,7 +49,7 @@ cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,0,-70.0f));
 bool isProjection = true;
 float xCameraRot = 0.0f;
 float yCameraRot = 0.0f;
-cyMatrix4f projection = cyMatrix4f::MatrixPerspective(FOV, WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
+cyMatrix4f projection = cyMatrix4f::MatrixPerspective(FOV, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE);
 
 //Light variables
 cyPoint3f lightPosition(70.0f, 70.0f, 70.0f);
@@ -71,7 +71,6 @@ float yPlaneRot = 0.0f;
 cyGLRenderTexture2D renderTexture;
 
 //General variables
-cyMatrix4f mvp;
 float lastRightMousePos;
 float lastLeftMousePosX;
 float lastLeftMousePosY;
@@ -140,8 +139,8 @@ int main(int argc, char *argv[])
 		{
 			teapotMesh.ComputeBoundingBox();
 			//Adjust model to accommodate bounding box at 0,0,0
-			teapotModelMatrix = cyMatrix4f::MatrixRotationX(-1.5708f) * cyMatrix4f::MatrixTrans(-(teapotMesh.GetBoundMax() + teapotMesh.GetBoundMin()) / 2.0f);
-			if (!teapotMesh.HasNormals()) {
+			teapotModelMatrix = cyMatrix4f::MatrixRotationX(-1.5708f) * cyMatrix4f::MatrixTrans((-(teapotMesh.GetBoundMax() + teapotMesh.GetBoundMin()) / 2.0f));
+			if (teapotMesh.HasNormals()) {
 				teapotMesh.ComputeNormals();
 			}
 
@@ -228,7 +227,7 @@ int main(int argc, char *argv[])
 			}
 
 			//Initialize material properties
-			teapotMaterial.diffuse = cyPoint3f(0.92f, 0.92f, 0.92f);
+			teapotMaterial.diffuse = cyPoint3f(0.9f, 0.9f, 0.9f);
 			teapotMaterial.ambient = teapotMaterial.diffuse;
 			teapotMaterial.specular = cyPoint3f(1.0f, 1.0f, 1.0f);
 			teapotMaterial.shininess = 50.0f;
@@ -297,9 +296,9 @@ int main(int argc, char *argv[])
 				unsigned int vertexIndex = i * 3;
 				
 				//Multiply vertex position with the size
-				vertices[vertexIndex].vertexPosition = cubeMesh.V(face.v[0]) * CUBE_MAP_MESH_SIZE;
-				vertices[vertexIndex + 1].vertexPosition = cubeMesh.V(face.v[1]) * CUBE_MAP_MESH_SIZE;
-				vertices[vertexIndex + 2].vertexPosition = cubeMesh.V(face.v[2]) * CUBE_MAP_MESH_SIZE;
+				vertices[vertexIndex].vertexPosition = cubeMesh.V(face.v[0]);
+				vertices[vertexIndex + 1].vertexPosition = cubeMesh.V(face.v[1]);
+				vertices[vertexIndex + 2].vertexPosition = cubeMesh.V(face.v[2]);
 			}
 
 			glGenVertexArrays(1, &cubeVAO);
@@ -389,80 +388,75 @@ void Display() {
 
 	//Clear buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	
-	//Setup matrices for teapot
-	const cyMatrix4f view = cameraTranslation * cameraRotation;
-	mvp = projection * view * teapotModelMatrix;
-	cyMatrix3f cameraMatrix = (view * teapotModelMatrix).GetSubMatrix3();
-	cyMatrix4f worldToModel = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);
-	cyMatrix4f lightModelMatrix = worldToModel * cyMatrix4f::MatrixTrans(lightPosition);
-	cyPoint3f transformedLightPos = lightModelMatrix.GetTrans();
-	cyPoint3f cameraPosition = view.GetTrans();
-	
-	//Set all shader params for teapot
+
+	//Draw skybox
 	{
-		teapotShaderProgram.Bind();
-		teapotShaderProgram.SetUniformMatrix4("mvp", mvp.data);
-		teapotShaderProgram.SetUniformMatrix4("cameraMatrix", (view * teapotModelMatrix).data);
-		cameraMatrix.Invert();
-		cameraMatrix.Transpose();
-		teapotShaderProgram.SetUniformMatrix3("normalMatrix", cameraMatrix.data);
-		teapotShaderProgram.SetUniform("lightPosition", transformedLightPos);
-		teapotShaderProgram.SetUniform("ambient", teapotMaterial.ambient);
-		teapotShaderProgram.SetUniform("diffuse", teapotMaterial.diffuse);
-		teapotShaderProgram.SetUniform("specular", teapotMaterial.specular);
-		teapotShaderProgram.SetUniform("shininess", teapotMaterial.shininess);
-		teapotShaderProgram.SetUniform("cameraPosition", cameraPosition);
-	}
-	
-	//Set active texture and bind for teapot
-	if (teapotMesh.NM() > 0) {
+		//Disable depth buffer
+		glDepthMask(GL_FALSE);
+
+		//Set shader values
 		{
-			//Diffuse
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, teapotDiffuseTextureId);
-
-			//Specular
-			glActiveTexture(GL_TEXTURE1);
-			glBindTexture(GL_TEXTURE_2D, teapotSpecularTextureId);
+			//Place cube so that camera is in the center and rotate it in the opposite direction
+			cyMatrix4f cubeMVP = projection * cyMatrix4f::MatrixRotationY(-yCameraRot) * cyMatrix4f::MatrixRotationX(-xCameraRot);
+			cubeMapShaderProgram.Bind();
+			cubeMapShaderProgram.SetUniformMatrix4("mvp", cubeMVP.data);
 		}
-		teapotShaderProgram.SetUniform("hasDiffuse", true);
-		teapotShaderProgram.SetUniform("hasSpecular", true);
-	}
-	else {
-		teapotShaderProgram.SetUniform("hasDiffuse", false);
-		teapotShaderProgram.SetUniform("hasSpecular", false);
+
+		//Bind cube texture
+		{
+			cubeMapTexture.Bind();
+		}
+
+		//Draw cube
+		{
+			glBindVertexArray(cubeVAO);
+			glDrawArrays(GL_TRIANGLES, 0, cubeMesh.NF() * 3);
+		}
+
+		//Enable depth buffer
+		glDepthMask(GL_TRUE);
 	}
 
-	//Draw teapot
+	//Draw model	
 	{
-		glBindVertexArray(teapotVAO);
-		glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
+		//Setup matrices for teapot
+		cyMatrix4f view = cameraTranslation * cameraRotation;
+		cyMatrix4f inverseViewMatrix = view.GetInverse();
+		cyMatrix4f teapotMVP = projection * view * teapotModelMatrix;
+		cyMatrix4f teapotMV = view * teapotModelMatrix;
+		cyMatrix3f teapotMVNormal = teapotMV.GetInverse().GetTranspose().GetSubMatrix3();
+		
+		//Calculate light position
+		cyMatrix4f lightRotationMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);
+		cyMatrix4f lightModelMatrix = lightRotationMatrix * cyMatrix4f::MatrixTrans(lightPosition);
+		cyPoint3f transformedLightPos = lightModelMatrix.GetTrans();
+
+		//Set all shader params for teapot
+		{
+			teapotShaderProgram.Bind();
+			teapotShaderProgram.SetUniformMatrix4("mvp", teapotMVP.data);
+			teapotShaderProgram.SetUniformMatrix4("mv", teapotMV.data);
+			teapotShaderProgram.SetUniformMatrix3("mvNormal", teapotMVNormal.data);
+			teapotShaderProgram.SetUniformMatrix4("inverseViewMatrix", inverseViewMatrix.data);
+			teapotShaderProgram.SetUniform("lightPosition", transformedLightPos);
+			teapotShaderProgram.SetUniform("ambient", teapotMaterial.ambient);
+			teapotShaderProgram.SetUniform("diffuse", teapotMaterial.diffuse);
+			teapotShaderProgram.SetUniform("specular", teapotMaterial.specular);
+			teapotShaderProgram.SetUniform("shininess", teapotMaterial.shininess);
+		}
+				
+		{
+			//Bind cube texture
+			cubeMapTexture.Bind();
+		}
+
+		//Draw teapot
+		{
+			glBindVertexArray(teapotVAO);
+			glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
+		}
 	}
-
-	//Disable depth buffer
-	glDepthMask(GL_FALSE);
-
-	//Set shader values
-	{
-		//Place cube so that camera is in the center and rotate it in the opposite direction
-		cyMatrix4f cubeMVP = projection * cyMatrix4f::MatrixRotationY(-yCameraRot) * cyMatrix4f::MatrixRotationX(-xCameraRot);
-		cubeMapShaderProgram.SetUniformMatrix4("mvp", cubeMVP.data);
-	}
-
-	//Bind cube texture
-	{
-		cubeMapTexture.Bind();
-	}
-
-	//Draw cube
-	{
-		glBindVertexArray(cubeVAO);
-		glDrawArrays(GL_TRIANGLES, 0, cubeMesh.NF() * 3);
-	}
-
-	//Enable depth buffer
-	glDepthMask(GL_TRUE);
+	
 
 	glutSwapBuffers();
 }
@@ -558,8 +552,8 @@ void GetMousePosition(int x, int y) {
 }
 
 void CompileShaders() {
-	teapotVertexShader.CompileFile("Assets/Shaders/Vertex/teapot.glsl", GL_VERTEX_SHADER);
-	teapotFragmentShader.CompileFile("Assets/Shaders/Fragment/teapot.glsl", GL_FRAGMENT_SHADER);
+	teapotVertexShader.CompileFile("Assets/Shaders/Vertex/reflection.glsl", GL_VERTEX_SHADER);
+	teapotFragmentShader.CompileFile("Assets/Shaders/Fragment/reflection.glsl", GL_FRAGMENT_SHADER);
 	teapotShaderProgram.Build(&teapotVertexShader, &teapotFragmentShader);
 }
 
@@ -568,7 +562,7 @@ void TogglePerspective() {
 		projection = cyMatrix4f::MatrixScale( 1 / cameraTranslation.GetTrans().Length());
 	}
 	else {
-		projection = cyMatrix4f::MatrixPerspective(0.785398f, WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100);
+		projection = cyMatrix4f::MatrixPerspective(FOV, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE);
 	}
 	isProjection = !isProjection;
 }
