@@ -34,6 +34,7 @@ const float ASPECT_RATIO = WINDOW_WIDTH / (float)WINDOW_HEIGHT;
 const float FOV = 0.785398f;
 const float NEAR_PLANE = 0.1f;
 const float FAR_PLANE = 1000.0f;
+const float DEG2RAD = 0.0174533f;
 
 //Teapot model variables
 cyTriMesh teapotMesh;
@@ -41,7 +42,7 @@ GLuint teapotVAO, teapotVBO, teapotDiffuseTextureId, teapotSpecularTextureId;
 cyGLSLShader teapotVertexShader, teapotFragmentShader;
 cyGLSLProgram teapotShaderProgram;
 Material teapotMaterial;
-cyMatrix4f teapotModelMatrix = cyMatrix4f::MatrixTrans(cyPoint3f(0, 0, 0));
+cyMatrix4f teapotTranslationMatrix = cyMatrix4f::MatrixTrans(cyPoint3f(0, 0, 0.0f));
 
 //Camera variables
 cyMatrix4f cameraRotation = cyMatrix4f::MatrixRotationX(0);
@@ -61,10 +62,9 @@ float yLightRot = 0.0f;
 GLuint planeVAO, planeVBO, planeDiffuseTextureId;
 cyGLSLShader planeVertexShader, planeFragmentShader;
 cyGLSLProgram planeShaderProgram;
-cyMatrix4f planeModelMatrix;
-cyMatrix4f planeTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0, 0, -10.0f));
+cyPoint3f planePosition = cyPoint3f(0.0f, -8.0f, 0.0f);
 bool isPlaneMoving;
-float xPlaneRot = 0.0f;
+float xPlaneRot = 90.0f * DEG2RAD;
 float yPlaneRot = 0.0f;
 
 //Render texture variables
@@ -139,29 +139,35 @@ int main(int argc, char *argv[])
 		{
 			teapotMesh.ComputeBoundingBox();
 			//Adjust model to accommodate bounding box at 0,0,0
-			teapotModelMatrix = cyMatrix4f::MatrixRotationX(-1.5708f) * cyMatrix4f::MatrixTrans((-(teapotMesh.GetBoundMax() + teapotMesh.GetBoundMin()) / 2.0f));
-			if (teapotMesh.HasNormals()) {
+			teapotTranslationMatrix.AddTrans((-(teapotMesh.GetBoundMax() + teapotMesh.GetBoundMin()) / 2.0f));
+			if (!teapotMesh.HasNormals()) {
 				teapotMesh.ComputeNormals();
 			}
+
+			bool hasTextureVertices = teapotMesh.HasTextureVertices();
 
 			//Extract all vertex data
 			VertexData* vertices = new VertexData[teapotMesh.NF() * 3];
 			for (unsigned int i = 0; i < teapotMesh.NF(); i++) {
-				cyTriMesh::TriFace face = teapotMesh.F(i);
-				cyTriMesh::TriFace normalFace = teapotMesh.FN(i);
-				cyTriMesh::TriFace textureFace = teapotMesh.FT(i);
+				
 				unsigned int vertexIndex = i * 3;
+				
+				cyTriMesh::TriFace face = teapotMesh.F(i);
 				vertices[vertexIndex].vertexPosition = teapotMesh.V(face.v[0]);
 				vertices[vertexIndex + 1].vertexPosition = teapotMesh.V(face.v[1]);
 				vertices[vertexIndex + 2].vertexPosition = teapotMesh.V(face.v[2]);
 
+				cyTriMesh::TriFace normalFace = teapotMesh.FN(i);
 				vertices[vertexIndex].vertexNormal = teapotMesh.VN(normalFace.v[0]);
 				vertices[vertexIndex + 1].vertexNormal = teapotMesh.VN(normalFace.v[1]);
 				vertices[vertexIndex + 2].vertexNormal = teapotMesh.VN(normalFace.v[2]);
 
-				vertices[vertexIndex].uv = cyPoint2f(teapotMesh.VT(textureFace.v[0]));
-				vertices[vertexIndex + 1].uv = cyPoint2f(teapotMesh.VT(textureFace.v[1]));
-				vertices[vertexIndex + 2].uv = cyPoint2f(teapotMesh.VT(textureFace.v[2]));
+				if (hasTextureVertices) {
+					cyTriMesh::TriFace textureFace = teapotMesh.FT(i);
+					vertices[vertexIndex].uv = cyPoint2f(teapotMesh.VT(textureFace.v[0]));
+					vertices[vertexIndex + 1].uv = cyPoint2f(teapotMesh.VT(textureFace.v[1]));
+					vertices[vertexIndex + 2].uv = cyPoint2f(teapotMesh.VT(textureFace.v[2]));
+				}
 			}
 
 			glGenVertexArrays(1, &teapotVAO);
@@ -235,8 +241,8 @@ int main(int argc, char *argv[])
 
 		//Setup plane
 		{
-			const float planeHalfWidth = 3.0f;
-			const float planeHalfHeight = 3.0f;
+			const float planeHalfWidth = 20.0f;
+			const float planeHalfHeight = 20.0f;
 			VertexData* vertices = new VertexData[6];
 			vertices[0].vertexPosition = cyPoint3f(-planeHalfWidth, -planeHalfHeight, 0.0f);
 			vertices[0].uv = cyPoint2f(0.0f, 0.0f);
@@ -266,8 +272,8 @@ int main(int argc, char *argv[])
 			glEnableVertexAttribArray(2);
 			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, uv));
 
-			planeVertexShader.CompileFile("Assets/Shaders/Vertex/plane.glsl", GL_VERTEX_SHADER);
-			planeFragmentShader.CompileFile("Assets/Shaders/Fragment/plane.glsl", GL_FRAGMENT_SHADER);
+			planeVertexShader.CompileFile("Assets/Shaders/Vertex/reflectionPlane.glsl", GL_VERTEX_SHADER);
+			planeFragmentShader.CompileFile("Assets/Shaders/Fragment/reflectionPlane.glsl", GL_FRAGMENT_SHADER);
 			planeShaderProgram.Build(&planeVertexShader, &planeFragmentShader);
 
 			delete[] vertices;
@@ -364,7 +370,8 @@ int main(int argc, char *argv[])
 				imageBuffer.clear();
 
 
-				cubeMapTexture.SetFilteringMode(GL_LINEAR, GL_LINEAR);
+				cubeMapTexture.SetFilteringMode(GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
+				cubeMapTexture.SetMaxAnisotropy();
 				cubeMapTexture.SetSeamless(true);
 				cubeMapTexture.BuildMipmaps();
 				
@@ -389,15 +396,19 @@ void Display() {
 	//Clear buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	//Draw skybox
+	//Initialize view matrix
+	cyMatrix4f view = cameraTranslation * cameraRotation;
+	cyMatrix4f inverseViewMatrix = view.GetInverse();
+
+	//Draw sky box
 	{
 		//Disable depth buffer
 		glDepthMask(GL_FALSE);
 
 		//Set shader values
-		{
+		{			
 			//Place cube so that camera is in the center and rotate it in the opposite direction
-			cyMatrix4f cubeMVP = projection * cyMatrix4f::MatrixRotationY(-yCameraRot) * cyMatrix4f::MatrixRotationX(-xCameraRot);
+			cyMatrix4f cubeMVP = projection * cyMatrix4f::MatrixRotationY(-yCameraRot) * cyMatrix4f::MatrixRotationX(xCameraRot);
 			cubeMapShaderProgram.Bind();
 			cubeMapShaderProgram.SetUniformMatrix4("mvp", cubeMVP.data);
 		}
@@ -420,10 +431,8 @@ void Display() {
 	//Draw model	
 	{
 		//Setup matrices for teapot
-		cyMatrix4f view = cameraTranslation * cameraRotation;
-		cyMatrix4f inverseViewMatrix = view.GetInverse();
-		cyMatrix4f teapotMVP = projection * view * teapotModelMatrix;
-		cyMatrix4f teapotMV = view * teapotModelMatrix;
+		cyMatrix4f teapotMVP = projection * view * teapotTranslationMatrix;
+		cyMatrix4f teapotMV = view * teapotTranslationMatrix;
 		cyMatrix3f teapotMVNormal = teapotMV.GetInverse().GetTranspose().GetSubMatrix3();
 		
 		//Calculate light position
@@ -454,6 +463,33 @@ void Display() {
 		{
 			glBindVertexArray(teapotVAO);
 			glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
+		}
+	}
+
+	//Draw plane
+	{
+		//Setup matrices for plane
+		cyMatrix4f planeModelMatrix = cyMatrix4f::MatrixTrans(planePosition) * cyMatrix4f::MatrixRotationY(yPlaneRot) * cyMatrix4f::MatrixRotationX(xPlaneRot);
+		cyMatrix4f planeMVPMatrix = projection * view * planeModelMatrix;
+		cyMatrix4f planeMVMatrix = view * planeModelMatrix;
+
+		//Set shader variables
+		{
+			planeShaderProgram.Bind();
+			planeShaderProgram.SetUniformMatrix4("mvp", planeMVPMatrix.data);
+			planeShaderProgram.SetUniformMatrix4("mv", planeMVMatrix.data);
+			planeShaderProgram.SetUniformMatrix4("inverseViewMatrix", inverseViewMatrix.data);
+		}
+
+		//Bind cube map
+		{
+			cubeMapTexture.Bind();
+		}
+
+		//Draw plane
+		{
+			glBindVertexArray(planeVAO);
+			glDrawArrays(GL_TRIANGLES, 0, 6);
 		}
 	}
 	
@@ -541,13 +577,8 @@ void GetMousePosition(int x, int y) {
 		}
 	}else {
 		float diff = static_cast<float>(y) - lastRightMousePos;
-		lastRightMousePos = static_cast<float>(y);
-		if (isPlaneMoving) {
-			planeTranslation.AddTrans(-cyPoint3f(0.0f, 0.0f, diff));
-		}
-		else {
-			cameraTranslation.AddTrans(-cyPoint3f(0.0f, 0.0f, diff));
-		}
+		lastRightMousePos = static_cast<float>(y);		
+		cameraTranslation.AddTrans(-cyPoint3f(0.0f, 0.0f, diff));
 	}
 }
 
