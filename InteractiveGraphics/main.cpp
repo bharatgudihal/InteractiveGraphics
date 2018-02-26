@@ -9,6 +9,7 @@
 #include <lodepng.h>
 #include <iostream>
 #include <string>
+#include <math.h>
 
 struct {
 	float r, g, b, a;
@@ -42,11 +43,11 @@ GLuint teapotVAO, teapotVBO, teapotDiffuseTextureId, teapotSpecularTextureId;
 cyGLSLShader teapotVertexShader, teapotFragmentShader;
 cyGLSLProgram teapotShaderProgram;
 Material teapotMaterial;
-cyMatrix4f teapotTranslationMatrix = cyMatrix4f::MatrixTrans(cyPoint3f(0, 0, 0.0f));
+cyMatrix4f teapotTranslationMatrix = cyMatrix4f::MatrixTrans(cyPoint3f(0.0f, 0.0f, 0.0f));
 
 //Camera variables
 cyMatrix4f cameraRotation = cyMatrix4f::MatrixRotationX(0);
-cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,0,-70.0f));
+cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,5.0f,-70.0f));
 bool isProjection = true;
 float xCameraRot = 0.0f;
 float yCameraRot = 0.0f;
@@ -64,7 +65,7 @@ cyGLSLShader planeVertexShader, planeFragmentShader;
 cyGLSLProgram planeShaderProgram;
 cyPoint3f planePosition = cyPoint3f(0.0f, -8.0f, 0.0f);
 bool isPlaneMoving;
-float xPlaneRot = 90.0f * DEG2RAD;
+float xPlaneRot = 0.0f;
 float yPlaneRot = 0.0f;
 
 //Render texture variables
@@ -108,6 +109,9 @@ int main(int argc, char *argv[])
 		glutInit(&argc, argv);
 		glutInitDisplayMode(GLUT_DOUBLE | GLUT_DEPTH | GLUT_RGBA);
 		glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+		glutInitContextVersion(3, 3);
+		glutInitContextProfile(GLUT_CORE_PROFILE);
+		glutInitContextFlags(GLUT_FORWARD_COMPATIBLE);
 		glutCreateWindow("Test");
 		glutDisplayFunc(Display);
 		glutIdleFunc(Idle);
@@ -117,7 +121,7 @@ int main(int argc, char *argv[])
 		glutSpecialFunc(GetKeySpecial);
 		glutSpecialUpFunc(GetKeyUpSpecial);
 		glEnable(GL_DEPTH_TEST);
-		glEnable(GL_TEXTURE_2D);
+		glEnable(GL_TEXTURE_2D);		
 		glewInit();
 	}
 		
@@ -241,20 +245,20 @@ int main(int argc, char *argv[])
 
 		//Setup plane
 		{
-			const float planeHalfWidth = 20.0f;
-			const float planeHalfHeight = 20.0f;
+			const float planeHalfWidth = 40.0f;
+			const float planeHalfHeight = 40.0f;
 			VertexData* vertices = new VertexData[6];
-			vertices[0].vertexPosition = cyPoint3f(-planeHalfWidth, -planeHalfHeight, 0.0f);
+			vertices[0].vertexPosition = cyPoint3f(-planeHalfWidth, 0.0f, -planeHalfHeight);
 			vertices[0].uv = cyPoint2f(0.0f, 0.0f);
-			vertices[1].vertexPosition = cyPoint3f(planeHalfWidth, -planeHalfHeight, 0.0f);
+			vertices[1].vertexPosition = cyPoint3f(planeHalfWidth, 0.0f, -planeHalfHeight);
 			vertices[1].uv = cyPoint2f(1.0f, 0.0f);
-			vertices[2].vertexPosition = cyPoint3f(-planeHalfWidth, planeHalfHeight, 0.0f);
+			vertices[2].vertexPosition = cyPoint3f(-planeHalfWidth, 0.0f, planeHalfHeight);
 			vertices[2].uv = cyPoint2f(0.0f, 1.0f);
-			vertices[3].vertexPosition = cyPoint3f(planeHalfWidth, -planeHalfHeight, 0.0f);
+			vertices[3].vertexPosition = cyPoint3f(planeHalfWidth, 0.0f, -planeHalfHeight);
 			vertices[3].uv = cyPoint2f(1.0f, 0.0f);
-			vertices[4].vertexPosition = cyPoint3f(planeHalfWidth, planeHalfHeight, 0.0f);
+			vertices[4].vertexPosition = cyPoint3f(planeHalfWidth, 0.0f, planeHalfHeight);
 			vertices[4].uv = cyPoint2f(1.0f, 1.0f);
-			vertices[5].vertexPosition = cyPoint3f(-planeHalfWidth, planeHalfHeight, 0.0f);
+			vertices[5].vertexPosition = cyPoint3f(-planeHalfWidth, 0.0f, planeHalfHeight);
 			vertices[5].uv = cyPoint2f(0.0f, 1.0f);
 
 			glGenVertexArrays(1, &planeVAO);
@@ -388,27 +392,19 @@ int main(int argc, char *argv[])
 	}
 }
 
-void Display() {
-
-	//Set clear color
-	glClearColor(color.r, color.g, color.b, color.a);	
-
-	//Clear buffers
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	//Initialize view matrix
-	cyMatrix4f view = cameraTranslation * cameraRotation;
-	cyMatrix4f inverseViewMatrix = view.GetInverse();
-
+void DrawScene(cyMatrix4f& view, cyMatrix4f& inverseViewMatrix, bool isFlipped) {
+	
 	//Draw sky box
 	{
 		//Disable depth buffer
 		glDepthMask(GL_FALSE);
 
 		//Set shader values
-		{			
+		{
 			//Place cube so that camera is in the center and rotate it in the opposite direction
-			cyMatrix4f cubeMVP = projection * cyMatrix4f::MatrixRotationY(-yCameraRot) * cyMatrix4f::MatrixRotationX(xCameraRot);
+			float xRot = isFlipped ? -xCameraRot : xCameraRot;
+			cyMatrix4f viewWithNoTranslation = cyMatrix4f::MatrixRotationY(yCameraRot) * cyMatrix4f::MatrixRotationX(xRot);
+			cyMatrix4f cubeMVP = projection * viewWithNoTranslation;
 			cubeMapShaderProgram.Bind();
 			cubeMapShaderProgram.SetUniformMatrix4("mvp", cubeMVP.data);
 		}
@@ -434,7 +430,7 @@ void Display() {
 		cyMatrix4f teapotMVP = projection * view * teapotTranslationMatrix;
 		cyMatrix4f teapotMV = view * teapotTranslationMatrix;
 		cyMatrix3f teapotMVNormal = teapotMV.GetInverse().GetTranspose().GetSubMatrix3();
-		
+
 		//Calculate light position
 		cyMatrix4f lightRotationMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);
 		cyMatrix4f lightModelMatrix = lightRotationMatrix * cyMatrix4f::MatrixTrans(lightPosition);
@@ -453,7 +449,7 @@ void Display() {
 			teapotShaderProgram.SetUniform("specular", teapotMaterial.specular);
 			teapotShaderProgram.SetUniform("shininess", teapotMaterial.shininess);
 		}
-				
+
 		{
 			//Bind cube texture
 			cubeMapTexture.Bind();
@@ -465,6 +461,35 @@ void Display() {
 			glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
 		}
 	}
+}
+
+void Display() {
+
+	//Set clear color
+	glClearColor(color.r, color.g, color.b, color.a);	
+
+	//Bind render buffer
+	renderTexture.Bind();
+
+	//Clear render buffer
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	
+	cyMatrix4f virtualView = cameraTranslation * cyMatrix4f::MatrixRotationY(yCameraRot) * cyMatrix4f::MatrixRotationX(-xCameraRot);
+	cyMatrix4f inverseViewMatrix = virtualView.GetInverse();
+
+	//Draw scene flipped
+	DrawScene(virtualView, inverseViewMatrix, true);
+
+	renderTexture.Unbind();
+	
+	//Clear back buffer
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	cyMatrix4f view = cameraTranslation * cameraRotation;
+	inverseViewMatrix = view.GetInverse();	
+
+	//Draw scene with camera perspective
+	DrawScene(view, inverseViewMatrix, false);
 
 	//Draw plane
 	{
@@ -472,18 +497,22 @@ void Display() {
 		cyMatrix4f planeModelMatrix = cyMatrix4f::MatrixTrans(planePosition) * cyMatrix4f::MatrixRotationY(yPlaneRot) * cyMatrix4f::MatrixRotationX(xPlaneRot);
 		cyMatrix4f planeMVPMatrix = projection * view * planeModelMatrix;
 		cyMatrix4f planeMVMatrix = view * planeModelMatrix;
+		cyMatrix4f virtualMVP = projection * virtualView * planeModelMatrix;
 
 		//Set shader variables
 		{
 			planeShaderProgram.Bind();
 			planeShaderProgram.SetUniformMatrix4("mvp", planeMVPMatrix.data);
-			planeShaderProgram.SetUniformMatrix4("mv", planeMVMatrix.data);
-			planeShaderProgram.SetUniformMatrix4("inverseViewMatrix", inverseViewMatrix.data);
+			
+			
+			
+			planeShaderProgram.SetUniformMatrix4("virtualMVP", virtualMVP.data);
 		}
 
-		//Bind cube map
+		//Bind render texture
 		{
 			cubeMapTexture.Bind();
+			renderTexture.BindTexture(GL_TEXTURE1);
 		}
 
 		//Draw plane
@@ -491,8 +520,7 @@ void Display() {
 			glBindVertexArray(planeVAO);
 			glDrawArrays(GL_TRIANGLES, 0, 6);
 		}
-	}
-	
+	}	
 
 	glutSwapBuffers();
 }

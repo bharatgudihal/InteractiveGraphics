@@ -5,12 +5,10 @@ layout (location = 1) in vec3 normal;
 layout (location = 2) in vec2 uv;
 
 uniform mat4 mvp;
-uniform mat4 mv;
 
-out vec3 cameraSpaceVertexPosition;
-
+out vec3 modelSpaceVertexPosition;
 
 void main(){
 	gl_Position = mvp * vec4(position, 1.0);
-	cameraSpaceVertexPosition = vec3(mv * vec4(position, 1.0));	
+	modelSpaceVertexPosition = position;
 }

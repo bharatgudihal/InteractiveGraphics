@@ -20,8 +20,7 @@ void main(){
 	vec3 normal = normalize(cameraSpaceVertexNormal);
 
 	vec3 reflected = reflect(incidentEye, normal);
-	
-	//convert from camera to world space
+		
 	reflected = vec3(inverseViewMatrix * vec4(reflected, 0.0));
 
 	vec4 reflectedFragmentColor = texture(cubeMap, reflected);
