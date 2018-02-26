@@ -47,7 +47,7 @@ cyMatrix4f teapotTranslationMatrix = cyMatrix4f::MatrixTrans(cyPoint3f(0.0f, 0.0
 
 //Camera variables
 cyMatrix4f cameraRotation = cyMatrix4f::MatrixRotationX(0);
-cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,5.0f,-70.0f));
+cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,8.0f,-70.0f));
 bool isProjection = true;
 float xCameraRot = 0.0f;
 float yCameraRot = 0.0f;
@@ -245,8 +245,8 @@ int main(int argc, char *argv[])
 
 		//Setup plane
 		{
-			const float planeHalfWidth = 40.0f;
-			const float planeHalfHeight = 40.0f;
+			const float planeHalfWidth = 50.0f;
+			const float planeHalfHeight = 50.0f;
 			VertexData* vertices = new VertexData[6];
 			vertices[0].vertexPosition = cyPoint3f(-planeHalfWidth, 0.0f, -planeHalfHeight);
 			vertices[0].uv = cyPoint2f(0.0f, 0.0f);
