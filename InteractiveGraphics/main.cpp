@@ -507,6 +507,7 @@ void Display() {
 			
 			
 			planeShaderProgram.SetUniformMatrix4("virtualMVP", virtualMVP.data);
+			planeShaderProgram.SetUniform("screenSize", cyPoint2f(WINDOW_WIDTH, WINDOW_HEIGHT));
 		}
 
 		//Bind render texture
