@@ -512,7 +512,7 @@ void Display() {
 		//Bind render texture
 		{
 			cubeMapTexture.Bind();
-			renderTexture.BindTexture(GL_TEXTURE1);
+			renderTexture.BindTexture();
 		}
 
 		//Draw plane
