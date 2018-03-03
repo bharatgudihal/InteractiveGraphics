@@ -54,7 +54,11 @@ float yCameraRot = 0.0f;
 cyMatrix4f projection = cyMatrix4f::MatrixPerspective(FOV, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE);
 
 //Light variables
-cyPoint3f lightPosition(70.0f, 70.0f, 70.0f);
+cyTriMesh lightMesh;
+GLuint lightVAO, lightVBO;
+cyGLSLShader lightVertexShader, lightFragmentShader;
+cyGLSLProgram lightShaderProgram;
+cyPoint3f lightPosition(30.0f, 30.0f, 30.0f);
 bool isLightRotating;
 float xLightRot = 0.0f;
 float yLightRot = 0.0f;
@@ -64,12 +68,10 @@ GLuint planeVAO, planeVBO, planeDiffuseTextureId;
 cyGLSLShader planeVertexShader, planeFragmentShader;
 cyGLSLProgram planeShaderProgram;
 cyPoint3f planePosition = cyPoint3f(0.0f, -8.0f, 0.0f);
+Material planeMaterial;
 bool isPlaneMoving;
 float xPlaneRot = 0.0f;
 float yPlaneRot = 0.0f;
-
-//Render texture variables
-cyGLRenderTexture2D renderTexture;
 
 //General variables
 float lastRightMousePos;
@@ -79,14 +81,6 @@ float rotationSpeed = 0.0174533f;
 float xRot = 0.0f;
 float yRot = 0.0f;
 int pressedButton;
-
-//Cube map variables
-static std::string cubeTexturePath = "Assets/Models/cube/cube.obj";
-cyTriMesh cubeMesh;
-GLuint cubeVAO, cubeVBO;
-cyGLTextureCubeMap cubeMapTexture;
-cyGLSLShader cubeMapVertexShader, cubeMapFragmentShader;
-cyGLSLProgram cubeMapShaderProgram;
 
 //Callback functions
 void CompileShaders();
@@ -144,9 +138,7 @@ int main(int argc, char *argv[])
 			teapotMesh.ComputeBoundingBox();
 			//Adjust model to accommodate bounding box at 0,0,0
 			teapotTranslationMatrix.AddTrans((-(teapotMesh.GetBoundMax() + teapotMesh.GetBoundMin()) / 2.0f));
-			if (!teapotMesh.HasNormals()) {
-				teapotMesh.ComputeNormals();
-			}
+			teapotMesh.ComputeNormals();
 
 			bool hasTextureVertices = teapotMesh.HasTextureVertices();
 
@@ -187,9 +179,7 @@ int main(int argc, char *argv[])
 			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexNormal));
 			//UV
 			glEnableVertexAttribArray(2);
-			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, uv));
-			
-			CompileShaders();
+			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, uv));		
 			
 			delete[] vertices;
 
@@ -237,7 +227,7 @@ int main(int argc, char *argv[])
 			}
 
 			//Initialize material properties
-			teapotMaterial.diffuse = cyPoint3f(0.9f, 0.9f, 0.9f);
+			teapotMaterial.diffuse = cyPoint3f(1.0f, 0.0f, 0.0f);
 			teapotMaterial.ambient = teapotMaterial.diffuse;
 			teapotMaterial.specular = cyPoint3f(1.0f, 1.0f, 1.0f);
 			teapotMaterial.shininess = 50.0f;
@@ -250,16 +240,22 @@ int main(int argc, char *argv[])
 			VertexData* vertices = new VertexData[6];
 			vertices[0].vertexPosition = cyPoint3f(-planeHalfWidth, 0.0f, -planeHalfHeight);
 			vertices[0].uv = cyPoint2f(0.0f, 0.0f);
+			vertices[0].vertexNormal = cyPoint3f(0.0f, 1.0f, 0.0f);
 			vertices[1].vertexPosition = cyPoint3f(planeHalfWidth, 0.0f, -planeHalfHeight);
 			vertices[1].uv = cyPoint2f(1.0f, 0.0f);
+			vertices[1].vertexNormal = cyPoint3f(0.0f, 1.0f, 0.0f);
 			vertices[2].vertexPosition = cyPoint3f(-planeHalfWidth, 0.0f, planeHalfHeight);
 			vertices[2].uv = cyPoint2f(0.0f, 1.0f);
+			vertices[2].vertexNormal = cyPoint3f(0.0f, 1.0f, 0.0f);
 			vertices[3].vertexPosition = cyPoint3f(planeHalfWidth, 0.0f, -planeHalfHeight);
 			vertices[3].uv = cyPoint2f(1.0f, 0.0f);
+			vertices[3].vertexNormal = cyPoint3f(0.0f, 1.0f, 0.0f);
 			vertices[4].vertexPosition = cyPoint3f(planeHalfWidth, 0.0f, planeHalfHeight);
 			vertices[4].uv = cyPoint2f(1.0f, 1.0f);
+			vertices[4].vertexNormal = cyPoint3f(0.0f, 1.0f, 0.0f);
 			vertices[5].vertexPosition = cyPoint3f(-planeHalfWidth, 0.0f, planeHalfHeight);
 			vertices[5].uv = cyPoint2f(0.0f, 1.0f);
+			vertices[5].vertexNormal = cyPoint3f(0.0f, 1.0f, 0.0f);
 
 			glGenVertexArrays(1, &planeVAO);
 			glGenBuffers(1, &planeVBO);
@@ -276,183 +272,95 @@ int main(int argc, char *argv[])
 			glEnableVertexAttribArray(2);
 			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, uv));
 
-			planeVertexShader.CompileFile("Assets/Shaders/Vertex/reflectionPlane.glsl", GL_VERTEX_SHADER);
-			planeFragmentShader.CompileFile("Assets/Shaders/Fragment/reflectionPlane.glsl", GL_FRAGMENT_SHADER);
-			planeShaderProgram.Build(&planeVertexShader, &planeFragmentShader);
+			//Initialize material properties
+			planeMaterial.diffuse = cyPoint3f(0.6f, 0.6f, 0.6f);
+			planeMaterial.ambient = planeMaterial.diffuse;
+			planeMaterial.specular = cyPoint3f(1.0f, 1.0f, 1.0f);
+			planeMaterial.shininess = 50.0f;
 
 			delete[] vertices;
 		}
 
-		//Setup render texture
+		//Light mesh
 		{
-			const int numChannels = 3;
-			renderTexture.Initialize(true, numChannels, WINDOW_WIDTH, WINDOW_HEIGHT);
-			//Bilinear filtering for magnification
-			renderTexture.SetTextureFilteringMode(GL_LINEAR, 0);
-			//Anisotropic filtering for minification
-			renderTexture.SetTextureMaxAnisotropy();
-			renderTexture.BuildTextureMipmaps();
-		}
+			char* lightMeshFilePath = "Assets/Models/light/light.obj";
+			if (lightMesh.LoadFromFileObj(lightMeshFilePath)) {
+				//Extract all vertex data
+				VertexData* vertices = new VertexData[lightMesh.NF() * 3];
+				for (unsigned int i = 0; i < lightMesh.NF(); i++) {
 
-		//Setup cube map
-		if (cubeMesh.LoadFromFileObj(cubeTexturePath.c_str())) {
-			
-			//Extract all vertex data
-			VertexData* vertices = new VertexData[cubeMesh.NF() * 3];
-			for (unsigned int i = 0; i < cubeMesh.NF(); i++) {
-				
-				cyTriMesh::TriFace face = cubeMesh.F(i);
-				
-				unsigned int vertexIndex = i * 3;
-				
-				//Multiply vertex position with the size
-				vertices[vertexIndex].vertexPosition = cubeMesh.V(face.v[0]);
-				vertices[vertexIndex + 1].vertexPosition = cubeMesh.V(face.v[1]);
-				vertices[vertexIndex + 2].vertexPosition = cubeMesh.V(face.v[2]);
+					unsigned int vertexIndex = i * 3;
+
+					cyTriMesh::TriFace face = lightMesh.F(i);
+					vertices[vertexIndex].vertexPosition = lightMesh.V(face.v[0]);
+					vertices[vertexIndex + 1].vertexPosition = lightMesh.V(face.v[1]);
+					vertices[vertexIndex + 2].vertexPosition = lightMesh.V(face.v[2]);
+
+					cyTriMesh::TriFace normalFace = lightMesh.FN(i);
+					vertices[vertexIndex].vertexNormal = lightMesh.VN(normalFace.v[0]);
+					vertices[vertexIndex + 1].vertexNormal = lightMesh.VN(normalFace.v[1]);
+					vertices[vertexIndex + 2].vertexNormal = lightMesh.VN(normalFace.v[2]);
+
+				}
+
+				glGenVertexArrays(1, &lightVAO);
+				glGenBuffers(1, &lightVBO);
+				glBindVertexArray(lightVAO);
+				glBindBuffer(GL_ARRAY_BUFFER, lightVBO);
+				glBufferData(GL_ARRAY_BUFFER, lightMesh.NF() * 3 * sizeof(VertexData), vertices, GL_STATIC_DRAW);
+				// Position vertex attribute
+				glEnableVertexAttribArray(0);
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexPosition));
+				// Position vertex attribute
+				glEnableVertexAttribArray(1);
+				glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexNormal));
+				//UV
+				glEnableVertexAttribArray(2);
+				glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, uv));
+
+				delete[] vertices;
 			}
-
-			glGenVertexArrays(1, &cubeVAO);
-			glGenBuffers(1, &cubeVBO);
-			glBindVertexArray(cubeVAO);
-			glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
-			glBufferData(GL_ARRAY_BUFFER, cubeMesh.NF() * 3 * sizeof(VertexData), vertices, GL_STATIC_DRAW);
-			
-			// Position vertex attribute
-			glEnableVertexAttribArray(0);
-			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, vertexPosition));			
-
-			delete[] vertices;
-
-			//Initialize shaders
-			{
-				cubeMapVertexShader.CompileFile("Assets/Shaders/Vertex/cubemap.glsl", GL_VERTEX_SHADER);
-				cubeMapFragmentShader.CompileFile("Assets/Shaders/Fragment/cubemap.glsl", GL_FRAGMENT_SHADER);
-				cubeMapShaderProgram.Build(&cubeMapVertexShader, &cubeMapFragmentShader);
-			}
-
-			//Initialize cube map
-			{	
-				//Load and assign cube map textures
-				std::vector<unsigned char> imageBuffer;
-				unsigned width, height;
-				bool result;
-
-				//NegX
-				result = lodepng::decode(imageBuffer, width, height, "Assets/Cubemaps/cubemap_negx.png", LodePNGColorType::LCT_RGB);
-				assert(result == 0);
-				cubeMapTexture.SetImage(cy::GLTextureCubeMap::NEGATIVE_X, imageBuffer.data(), 3, width, height);
-				imageBuffer.clear();
-				
-				//NegY
-				result = lodepng::decode(imageBuffer, width, height, "Assets/Cubemaps/cubemap_negy.png", LodePNGColorType::LCT_RGB);
-				assert(result == 0);
-				cubeMapTexture.SetImage(cy::GLTextureCubeMap::NEGATIVE_Y, imageBuffer.data(), 3, width, height);
-				imageBuffer.clear();
-
-				//NegZ
-				result = lodepng::decode(imageBuffer, width, height, "Assets/Cubemaps/cubemap_negz.png", LodePNGColorType::LCT_RGB);
-				assert(result == 0);
-				cubeMapTexture.SetImage(cy::GLTextureCubeMap::NEGATIVE_Z, imageBuffer.data(), 3, width, height);
-				imageBuffer.clear();
-
-				//PosX
-				result = lodepng::decode(imageBuffer, width, height, "Assets/Cubemaps/cubemap_posx.png", LodePNGColorType::LCT_RGB);
-				assert(result == 0);
-				cubeMapTexture.SetImage(cy::GLTextureCubeMap::POSITIVE_X, imageBuffer.data(), 3, width, height);
-				imageBuffer.clear();
-
-				//PosY
-				result = lodepng::decode(imageBuffer, width, height, "Assets/Cubemaps/cubemap_posy.png", LodePNGColorType::LCT_RGB);
-				assert(result == 0);
-				cubeMapTexture.SetImage(cy::GLTextureCubeMap::POSITIVE_Y, imageBuffer.data(), 3, width, height);
-				imageBuffer.clear();
-
-				//PosZ
-				result = lodepng::decode(imageBuffer, width, height, "Assets/Cubemaps/cubemap_posz.png", LodePNGColorType::LCT_RGB);
-				assert(result == 0);
-				cubeMapTexture.SetImage(cy::GLTextureCubeMap::POSITIVE_Z, imageBuffer.data(), 3, width, height);
-				imageBuffer.clear();
-
-
-				cubeMapTexture.SetFilteringMode(GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
-				cubeMapTexture.SetMaxAnisotropy();
-				cubeMapTexture.SetSeamless(true);
-				cubeMapTexture.BuildMipmaps();
-				
+			else {
+				assert(false + "Failed to load light mesh");
 			}
 		}
+
+		CompileShaders();
 
 		glutMainLoop();		
 
-		//Cleanup
-		renderTexture.Delete();
 	}
 	else {
 		std::cerr << "File not found" << std::endl;
 	}
 }
 
-void DrawScene(cyMatrix4f& view, cyMatrix4f& inverseViewMatrix, bool isFlipped) {
+void DrawScene(cyMatrix4f& view) {
 	
-	//Draw sky box
-	{
-		//Disable depth buffer
-		glDepthMask(GL_FALSE);
-
-		//Set shader values
-		{
-			//Place cube so that camera is in the center and rotate it in the opposite direction
-			float xRot = isFlipped ? -xCameraRot : xCameraRot;
-			cyMatrix4f viewWithNoTranslation = cyMatrix4f::MatrixRotationY(yCameraRot) * cyMatrix4f::MatrixRotationX(xRot);
-			cyMatrix4f cubeMVP = projection * viewWithNoTranslation;
-			cubeMapShaderProgram.Bind();
-			cubeMapShaderProgram.SetUniformMatrix4("mvp", cubeMVP.data);
-		}
-
-		//Bind cube texture
-		{
-			cubeMapTexture.Bind();
-		}
-
-		//Draw cube
-		{
-			glBindVertexArray(cubeVAO);
-			glDrawArrays(GL_TRIANGLES, 0, cubeMesh.NF() * 3);
-		}
-
-		//Enable depth buffer
-		glDepthMask(GL_TRUE);
-	}
+	//Calculate light position
+	cyMatrix4f lightRotationMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);
+	cyMatrix4f lightModelMatrix = lightRotationMatrix * cyMatrix4f::MatrixTrans(lightPosition);
+	cyPoint3f transformedLightPos = (view * lightModelMatrix).GetTrans();
 
 	//Draw model	
 	{
 		//Setup matrices for teapot
 		cyMatrix4f teapotMVP = projection * view * teapotTranslationMatrix;
 		cyMatrix4f teapotMV = view * teapotTranslationMatrix;
-		cyMatrix3f teapotMVNormal = teapotMV.GetInverse().GetTranspose().GetSubMatrix3();
-
-		//Calculate light position
-		cyMatrix4f lightRotationMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);
-		cyMatrix4f lightModelMatrix = lightRotationMatrix * cyMatrix4f::MatrixTrans(lightPosition);
-		cyPoint3f transformedLightPos = lightModelMatrix.GetTrans();
+		cyMatrix3f teapotMVNormal = teapotMV.GetInverse().GetTranspose().GetSubMatrix3();		
 
 		//Set all shader params for teapot
 		{
 			teapotShaderProgram.Bind();
 			teapotShaderProgram.SetUniformMatrix4("mvp", teapotMVP.data);
 			teapotShaderProgram.SetUniformMatrix4("mv", teapotMV.data);
-			teapotShaderProgram.SetUniformMatrix3("mvNormal", teapotMVNormal.data);
-			teapotShaderProgram.SetUniformMatrix4("inverseViewMatrix", inverseViewMatrix.data);
+			teapotShaderProgram.SetUniformMatrix3("normalMatrix", teapotMVNormal.data);
 			teapotShaderProgram.SetUniform("lightPosition", transformedLightPos);
+			teapotShaderProgram.SetUniform("cameraPosition", view.GetTrans());
 			teapotShaderProgram.SetUniform("ambient", teapotMaterial.ambient);
 			teapotShaderProgram.SetUniform("diffuse", teapotMaterial.diffuse);
 			teapotShaderProgram.SetUniform("specular", teapotMaterial.specular);
 			teapotShaderProgram.SetUniform("shininess", teapotMaterial.shininess);
-		}
-
-		{
-			//Bind cube texture
-			cubeMapTexture.Bind();
 		}
 
 		//Draw teapot
@@ -461,35 +369,6 @@ void DrawScene(cyMatrix4f& view, cyMatrix4f& inverseViewMatrix, bool isFlipped) 
 			glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
 		}
 	}
-}
-
-void Display() {
-
-	//Set clear color
-	glClearColor(color.r, color.g, color.b, color.a);	
-
-	//Bind render buffer
-	renderTexture.Bind();
-
-	//Clear render buffer
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	
-	cyMatrix4f virtualView = cameraTranslation * cyMatrix4f::MatrixRotationY(yCameraRot) * cyMatrix4f::MatrixRotationX(-xCameraRot);
-	cyMatrix4f inverseViewMatrix = virtualView.GetInverse();
-
-	//Draw scene flipped
-	DrawScene(virtualView, inverseViewMatrix, true);
-
-	renderTexture.Unbind();
-	
-	//Clear back buffer
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	cyMatrix4f view = cameraTranslation * cameraRotation;
-	inverseViewMatrix = view.GetInverse();	
-
-	//Draw scene with camera perspective
-	DrawScene(view, inverseViewMatrix, false);
 
 	//Draw plane
 	{
@@ -497,23 +376,21 @@ void Display() {
 		cyMatrix4f planeModelMatrix = cyMatrix4f::MatrixTrans(planePosition) * cyMatrix4f::MatrixRotationY(yPlaneRot) * cyMatrix4f::MatrixRotationX(xPlaneRot);
 		cyMatrix4f planeMVPMatrix = projection * view * planeModelMatrix;
 		cyMatrix4f planeMVMatrix = view * planeModelMatrix;
-		cyMatrix4f virtualMVP = projection * virtualView * planeModelMatrix;
+		cyMatrix3f planeMVNormal = planeMVMatrix.GetInverse().GetTranspose().GetSubMatrix3();
+		cyMatrix4f virtualMVP = projection * view * planeModelMatrix;
 
 		//Set shader variables
 		{
 			planeShaderProgram.Bind();
 			planeShaderProgram.SetUniformMatrix4("mvp", planeMVPMatrix.data);
-			
-			
-			
-			planeShaderProgram.SetUniformMatrix4("virtualMVP", virtualMVP.data);
-			planeShaderProgram.SetUniform("screenSize", cyPoint2f(WINDOW_WIDTH, WINDOW_HEIGHT));
-		}
-
-		//Bind render texture
-		{
-			cubeMapTexture.Bind();
-			renderTexture.BindTexture();
+			planeShaderProgram.SetUniformMatrix4("mv", planeMVMatrix.data);
+			planeShaderProgram.SetUniformMatrix3("normalMatrix", planeMVNormal.data);
+			planeShaderProgram.SetUniform("lightPosition", transformedLightPos);
+			planeShaderProgram.SetUniform("cameraPosition", view.GetTrans());
+			planeShaderProgram.SetUniform("ambient", planeMaterial.ambient);
+			planeShaderProgram.SetUniform("diffuse", planeMaterial.diffuse);
+			planeShaderProgram.SetUniform("specular", planeMaterial.specular);
+			planeShaderProgram.SetUniform("shininess", planeMaterial.shininess);
 		}
 
 		//Draw plane
@@ -521,7 +398,35 @@ void Display() {
 			glBindVertexArray(planeVAO);
 			glDrawArrays(GL_TRIANGLES, 0, 6);
 		}
-	}	
+	}
+}
+
+void Display() {
+
+	//Set clear color
+	glClearColor(color.r, color.g, color.b, color.a);			
+	//Clear back buffer
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	cyMatrix4f view = cameraTranslation * cameraRotation;
+
+	DrawScene(view);
+
+	//Light matrices
+	cyMatrix4f lightModelMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot) * cyMatrix4f::MatrixTrans(lightPosition);
+	cyMatrix4f lightMVP = projection * view * lightModelMatrix;
+
+	//Bind shader
+	{
+		lightShaderProgram.Bind();
+		lightShaderProgram.SetUniformMatrix4("mvp", lightMVP.data);
+	}
+
+	//Draw light
+	{
+		glBindVertexArray(lightVAO);
+		glDrawArrays(GL_TRIANGLES, 0, lightMesh.NF() * 3);
+	}
 
 	glutSwapBuffers();
 }
@@ -612,9 +517,17 @@ void GetMousePosition(int x, int y) {
 }
 
 void CompileShaders() {
-	teapotVertexShader.CompileFile("Assets/Shaders/Vertex/reflection.glsl", GL_VERTEX_SHADER);
-	teapotFragmentShader.CompileFile("Assets/Shaders/Fragment/reflection.glsl", GL_FRAGMENT_SHADER);
+	teapotVertexShader.CompileFile("Assets/Shaders/Vertex/shadow.glsl", GL_VERTEX_SHADER);
+	teapotFragmentShader.CompileFile("Assets/Shaders/Fragment/shadow.glsl", GL_FRAGMENT_SHADER);
 	teapotShaderProgram.Build(&teapotVertexShader, &teapotFragmentShader);
+
+	planeVertexShader.CompileFile("Assets/Shaders/Vertex/shadow.glsl", GL_VERTEX_SHADER);
+	planeFragmentShader.CompileFile("Assets/Shaders/Fragment/shadow.glsl", GL_FRAGMENT_SHADER);
+	planeShaderProgram.Build(&planeVertexShader, &planeFragmentShader);
+
+	lightVertexShader.CompileFile("Assets/Shaders/Vertex/light.glsl", GL_VERTEX_SHADER);
+	lightFragmentShader.CompileFile("Assets/Shaders/Fragment/light.glsl", GL_FRAGMENT_SHADER);
+	lightShaderProgram.Build(&lightVertexShader, &lightFragmentShader);
 }
 
 void TogglePerspective() {
