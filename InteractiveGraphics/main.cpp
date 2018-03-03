@@ -47,7 +47,7 @@ cyMatrix4f teapotTranslationMatrix = cyMatrix4f::MatrixTrans(cyPoint3f(0.0f, 0.0
 
 //Camera variables
 cyMatrix4f cameraRotation = cyMatrix4f::MatrixRotationX(0);
-cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,8.0f,-70.0f));
+cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,-8.0f,-70.0f));
 bool isProjection = true;
 float xCameraRot = 0.0f;
 float yCameraRot = 0.0f;
@@ -58,7 +58,7 @@ cyTriMesh lightMesh;
 GLuint lightVAO, lightVBO;
 cyGLSLShader lightVertexShader, lightFragmentShader;
 cyGLSLProgram lightShaderProgram;
-cyPoint3f lightPosition(30.0f, 30.0f, 30.0f);
+cyPoint3f lightPosition(0, -8.0f, -30.0f);
 bool isLightRotating;
 float xLightRot = 0.0f;
 float yLightRot = 0.0f;
@@ -82,6 +82,13 @@ float xRot = 0.0f;
 float yRot = 0.0f;
 int pressedButton;
 
+//Depth buffer
+cyGLRenderDepth2D depthBuffer;
+
+//Shadow map shader
+cyGLSLShader shadowMapVertexShader, shadowMapFragmentShader;
+cyGLSLProgram shadowMapShaderProgram;
+
 //Callback functions
 void CompileShaders();
 void Display();
@@ -95,7 +102,6 @@ void TogglePerspective();
 
 int main(int argc, char *argv[])
 {	
-	
 	color = { 0.0f,0.0f,0.0f,0.0f };
 
 	//Initialize window and opengl params
@@ -325,6 +331,13 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		//Initialize depth buffer
+		{
+			depthBuffer.Initialize(true, WINDOW_WIDTH, WINDOW_HEIGHT, GL_DEPTH_COMPONENT16);
+			depthBuffer.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR);
+			depthBuffer.BuildTextureMipmaps();
+		}
+
 		CompileShaders();
 
 		glutMainLoop();		
@@ -335,97 +348,144 @@ int main(int argc, char *argv[])
 	}
 }
 
-void DrawScene(cyMatrix4f& view) {
-	
-	//Calculate light position
-	cyMatrix4f lightRotationMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);
-	cyMatrix4f lightModelMatrix = lightRotationMatrix * cyMatrix4f::MatrixTrans(lightPosition);
-	cyPoint3f transformedLightPos = (view * lightModelMatrix).GetTrans();
+void Display() {
 
-	//Draw model	
-	{
-		//Setup matrices for teapot
-		cyMatrix4f teapotMVP = projection * view * teapotTranslationMatrix;
-		cyMatrix4f teapotMV = view * teapotTranslationMatrix;
-		cyMatrix3f teapotMVNormal = teapotMV.GetInverse().GetTranspose().GetSubMatrix3();		
+	//Set clear color
+	glClearColor(color.r, color.g, color.b, color.a);
 
-		//Set all shader params for teapot
+	cyMatrix4f view = cameraTranslation * cameraRotation;
+
+	//Calculate light position	
+	cyMatrix4f lightViewMatrix = cyMatrix4f::MatrixTrans(lightPosition) * cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);	
+	cyMatrix4f lightProjectionMatrix = cyMatrix4f::MatrixScale(1 / lightPosition.Length());
+
+	//Draw into depth buffer
+	{		
+		depthBuffer.Bind();
+		
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		//Draw model	
 		{
-			teapotShaderProgram.Bind();
-			teapotShaderProgram.SetUniformMatrix4("mvp", teapotMVP.data);
-			teapotShaderProgram.SetUniformMatrix4("mv", teapotMV.data);
-			teapotShaderProgram.SetUniformMatrix3("normalMatrix", teapotMVNormal.data);
-			teapotShaderProgram.SetUniform("lightPosition", transformedLightPos);
-			teapotShaderProgram.SetUniform("cameraPosition", view.GetTrans());
-			teapotShaderProgram.SetUniform("ambient", teapotMaterial.ambient);
-			teapotShaderProgram.SetUniform("diffuse", teapotMaterial.diffuse);
-			teapotShaderProgram.SetUniform("specular", teapotMaterial.specular);
-			teapotShaderProgram.SetUniform("shininess", teapotMaterial.shininess);
+			//Setup matrices for teapot
+			cyMatrix4f teapotMVP = lightProjectionMatrix * lightViewMatrix * teapotTranslationMatrix;
+
+			//Set all shader params for teapot
+			{
+				shadowMapShaderProgram.Bind();
+				shadowMapShaderProgram.SetUniformMatrix4("mvp", teapotMVP.data);				
+			}
+
+			//Draw teapot
+			{
+				glBindVertexArray(teapotVAO);
+				glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
+			}
 		}
 
-		//Draw teapot
-		{
-			glBindVertexArray(teapotVAO);
-			glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
-		}
+		depthBuffer.Unbind();
 	}
 
-	//Draw plane
+	//Draw normal scene
 	{
-		//Setup matrices for plane
-		cyMatrix4f planeModelMatrix = cyMatrix4f::MatrixTrans(planePosition) * cyMatrix4f::MatrixRotationY(yPlaneRot) * cyMatrix4f::MatrixRotationX(xPlaneRot);
-		cyMatrix4f planeMVPMatrix = projection * view * planeModelMatrix;
-		cyMatrix4f planeMVMatrix = view * planeModelMatrix;
-		cyMatrix3f planeMVNormal = planeMVMatrix.GetInverse().GetTranspose().GetSubMatrix3();
-		cyMatrix4f virtualMVP = projection * view * planeModelMatrix;
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		//Set shader variables
+		cyMatrix4f lightModelMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot) * cyMatrix4f::MatrixTrans(lightPosition);
+		cyPoint3f transformedLightPos = (view * lightModelMatrix).GetTrans();		
+
+		//Draw model	
 		{
-			planeShaderProgram.Bind();
-			planeShaderProgram.SetUniformMatrix4("mvp", planeMVPMatrix.data);
-			planeShaderProgram.SetUniformMatrix4("mv", planeMVMatrix.data);
-			planeShaderProgram.SetUniformMatrix3("normalMatrix", planeMVNormal.data);
-			planeShaderProgram.SetUniform("lightPosition", transformedLightPos);
-			planeShaderProgram.SetUniform("cameraPosition", view.GetTrans());
-			planeShaderProgram.SetUniform("ambient", planeMaterial.ambient);
-			planeShaderProgram.SetUniform("diffuse", planeMaterial.diffuse);
-			planeShaderProgram.SetUniform("specular", planeMaterial.specular);
-			planeShaderProgram.SetUniform("shininess", planeMaterial.shininess);
+			//Setup matrices for teapot
+			cyMatrix4f teapotMVP = projection * view * teapotTranslationMatrix;
+			cyMatrix4f teapotMV = view * teapotTranslationMatrix;
+			cyMatrix3f teapotMVNormal = teapotMV.GetInverse().GetTranspose().GetSubMatrix3();
+			cyMatrix4f depthMVP = lightProjectionMatrix * lightViewMatrix * teapotTranslationMatrix;
+
+			//Set all shader params for teapot
+			{
+				teapotShaderProgram.Bind();
+				teapotShaderProgram.SetUniformMatrix4("mvp", teapotMVP.data);
+				teapotShaderProgram.SetUniformMatrix4("mv", teapotMV.data);
+				teapotShaderProgram.SetUniformMatrix3("normalMatrix", teapotMVNormal.data);
+				teapotShaderProgram.SetUniform("lightPosition", transformedLightPos);
+				teapotShaderProgram.SetUniform("cameraPosition", view.GetTrans());
+				teapotShaderProgram.SetUniform("ambient", teapotMaterial.ambient);
+				teapotShaderProgram.SetUniform("diffuse", teapotMaterial.diffuse);
+				teapotShaderProgram.SetUniform("specular", teapotMaterial.specular);
+				teapotShaderProgram.SetUniform("shininess", teapotMaterial.shininess);
+
+				//Pass shadow params				
+				teapotShaderProgram.SetUniformMatrix4("depthBiasMVP", depthMVP.data);
+			}
+
+			//Bind depth buffer
+			{
+				depthBuffer.BindTexture();
+			}
+
+			//Draw teapot
+			{
+				glBindVertexArray(teapotVAO);
+				glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
+			}
 		}
 
 		//Draw plane
 		{
-			glBindVertexArray(planeVAO);
-			glDrawArrays(GL_TRIANGLES, 0, 6);
+			//Setup matrices for plane
+			cyMatrix4f planeModelMatrix = cyMatrix4f::MatrixTrans(planePosition) * cyMatrix4f::MatrixRotationY(yPlaneRot) * cyMatrix4f::MatrixRotationX(xPlaneRot);
+			cyMatrix4f planeMVPMatrix = projection * view * planeModelMatrix;
+			cyMatrix4f planeMVMatrix = view * planeModelMatrix;
+			cyMatrix3f planeMVNormal = planeMVMatrix.GetInverse().GetTranspose().GetSubMatrix3();			
+			cyMatrix4f depthMVP = lightProjectionMatrix * lightViewMatrix * planeModelMatrix;
+
+			//Set shader variables
+			{
+				planeShaderProgram.Bind();
+				planeShaderProgram.SetUniformMatrix4("mvp", planeMVPMatrix.data);
+				planeShaderProgram.SetUniformMatrix4("mv", planeMVMatrix.data);
+				planeShaderProgram.SetUniformMatrix3("normalMatrix", planeMVNormal.data);
+				planeShaderProgram.SetUniform("lightPosition", transformedLightPos);
+				planeShaderProgram.SetUniform("cameraPosition", view.GetTrans());
+				planeShaderProgram.SetUniform("ambient", planeMaterial.ambient);
+				planeShaderProgram.SetUniform("diffuse", planeMaterial.diffuse);
+				planeShaderProgram.SetUniform("specular", planeMaterial.specular);
+				planeShaderProgram.SetUniform("shininess", planeMaterial.shininess);
+
+				//Pass shadow params				
+				planeShaderProgram.SetUniformMatrix4("depthBiasMVP", depthMVP.data);
+			}
+
+			//Bind depth buffer
+			{
+				depthBuffer.BindTexture();
+			}
+
+			//Draw plane
+			{
+				glBindVertexArray(planeVAO);
+				glDrawArrays(GL_TRIANGLES, 0, 6);
+			}
 		}
-	}
-}
 
-void Display() {
+		//Draw light
+		{
+			//Light matrices
+			cyMatrix4f localLightModelMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot) * cyMatrix4f::MatrixTrans(lightPosition);
+			cyMatrix4f lightMVP = projection * view * localLightModelMatrix;
 
-	//Set clear color
-	glClearColor(color.r, color.g, color.b, color.a);			
-	//Clear back buffer
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			//Bind shader
+			{
+				lightShaderProgram.Bind();
+				lightShaderProgram.SetUniformMatrix4("mvp", lightMVP.data);
+			}
 
-	cyMatrix4f view = cameraTranslation * cameraRotation;
-
-	DrawScene(view);
-
-	//Light matrices
-	cyMatrix4f lightModelMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot) * cyMatrix4f::MatrixTrans(lightPosition);
-	cyMatrix4f lightMVP = projection * view * lightModelMatrix;
-
-	//Bind shader
-	{
-		lightShaderProgram.Bind();
-		lightShaderProgram.SetUniformMatrix4("mvp", lightMVP.data);
-	}
-
-	//Draw light
-	{
-		glBindVertexArray(lightVAO);
-		glDrawArrays(GL_TRIANGLES, 0, lightMesh.NF() * 3);
+			//Draw mesh
+			{
+				glBindVertexArray(lightVAO);
+				glDrawArrays(GL_TRIANGLES, 0, lightMesh.NF() * 3);
+			}
+		}
 	}
 
 	glutSwapBuffers();
@@ -528,6 +588,10 @@ void CompileShaders() {
 	lightVertexShader.CompileFile("Assets/Shaders/Vertex/light.glsl", GL_VERTEX_SHADER);
 	lightFragmentShader.CompileFile("Assets/Shaders/Fragment/light.glsl", GL_FRAGMENT_SHADER);
 	lightShaderProgram.Build(&lightVertexShader, &lightFragmentShader);
+
+	shadowMapVertexShader.CompileFile("Assets/Shaders/Vertex/shadowMap.glsl", GL_VERTEX_SHADER);
+	shadowMapFragmentShader.CompileFile("Assets/Shaders/Fragment/shadowMap.glsl", GL_FRAGMENT_SHADER);
+	shadowMapShaderProgram.Build(&shadowMapVertexShader, &shadowMapFragmentShader);
 }
 
 void TogglePerspective() {
