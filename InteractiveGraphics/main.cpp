@@ -334,8 +334,10 @@ int main(int argc, char *argv[])
 
 		//Initialize depth buffer
 		{
-			depthBuffer.Initialize(true, WINDOW_WIDTH, WINDOW_HEIGHT, GL_DEPTH_COMPONENT16);
-			depthBuffer.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR);
+			depthBuffer.Initialize(true, WINDOW_WIDTH, WINDOW_HEIGHT, GL_DEPTH_COMPONENT);
+			depthBuffer.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
+			depthBuffer.SetTextureWrappingMode(GL_MIRRORED_REPEAT, GL_MIRRORED_REPEAT);
+			//depthBuffer.SetTextureMaxAnisotropy();
 			depthBuffer.BuildTextureMipmaps();
 		}
 
@@ -353,18 +355,14 @@ void Display() {
 
 	using namespace glm;
 
-	//Set clear color
-	glClearColor(color.r, color.g, color.b, color.a);
-
-	vec3 cameraUp(0.0f, 1.0f, 0.0f);	
-	vec3 xAxis(1.0f, 0.0f, 0.0);
-	vec3 yAxis(0.0f, 1.0f, 0.0);
-		
+	vec3 cameraUp(0.0f, 1.0f, 0.0f);
 	mat4 cameraRotationMatrix = eulerAngleXYZ(xCameraRot, yCameraRot, 0.0f);
 	vec3 localCameraPosition = vec3(vec4(cameraPosition, 1.0f) * cameraRotationMatrix);
-	cameraUp = normalize(vec3(cameraRotationMatrix * vec4(cameraUp, 0.0f)));
+	cameraUp = normalize(vec3(vec4(cameraUp, 0.0f) * cameraRotationMatrix));
 
 	mat4 cameraView = lookAt(localCameraPosition, vec3(0.0f), cameraUp);	
+
+	mat4 lightSpaceMatrix;
 
 	//Draw the shadow scene
 	{
@@ -374,13 +372,14 @@ void Display() {
 		lightUp = normalize(vec3(lightRotationMatrix * vec4(lightUp, 0.0f)));
 		mat4 lightView = lookAt(localLightPosition, vec3(0.0), lightUp);
 		
-		float near_plane = 1.0f, far_plane = 100.0f;
-		float projectionCubeSize = 10.0f;
-		glm::mat4 lightProjection = glm::ortho(-projectionCubeSize, projectionCubeSize, -projectionCubeSize, projectionCubeSize, near_plane, far_plane);
+		float near_plane = 1.0f, far_plane = 200.0f;
+		float projectionCubeSize = 50.0f;
+		mat4 lightProjection = ortho(-projectionCubeSize, projectionCubeSize, -projectionCubeSize, projectionCubeSize, near_plane, far_plane);		
 
-		mat4 lightSpaceMatrix = lightProjection * lightView;
+		lightSpaceMatrix = lightProjection * lightView;
 		
 		depthBuffer.Bind();
+		glClearColor(color.r, color.g, color.b, color.a);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		//Draw model	
@@ -408,10 +407,9 @@ void Display() {
 
 	//Draw normal scene
 	{
+		glClearColor(color.r, color.g, color.b, color.a);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		mat4 lightModelMatrix;
-		lightModelMatrix = translate(lightModelMatrix, lightPosition);
+				
 		mat4 lightRotationMatrix = eulerAngleXYZ(xLightRot, yLightRot, 0.0f);
 		vec3 localLightPosition = vec3(vec4(lightPosition, 1.0f) * lightRotationMatrix);
 
@@ -420,8 +418,6 @@ void Display() {
 			//Setup matrices for teapot
 			mat4 teapotTranslationMatrix;
 			teapotTranslationMatrix = translate(teapotTranslationMatrix, teapotPosition);
-			
-			//mat4 depthMVP = lightProjectionMatrix * lightViewMatrix * teapotTranslationMatrix;
 
 			//Set all shader params for teapot
 			{
@@ -437,12 +433,12 @@ void Display() {
 				teapotShaderProgram.SetUniform("shininess", teapotMaterial.shininess);
 
 				//Pass shadow params				
-				//teapotShaderProgram.SetUniformMatrix4("depthBiasMVP", depthMVP.data);
+				teapotShaderProgram.SetUniformMatrix4("lightSpaceMatrix", value_ptr(lightSpaceMatrix));
 			}
 
 			//Bind depth buffer
 			{
-				//depthBuffer.BindTexture();
+				depthBuffer.BindTexture();
 			}
 
 			//Draw teapot
@@ -456,8 +452,7 @@ void Display() {
 		{
 			//Setup matrices for plane
 			mat4 planeModelMatrix;
-			planeModelMatrix = translate(planeModelMatrix, planePosition);	
-			//cyMatrix4f depthMVP = lightProjectionMatrix * lightViewMatrix * planeModelMatrix;
+			planeModelMatrix = translate(planeModelMatrix, planePosition);
 
 			//Set shader variables
 			{
@@ -473,12 +468,12 @@ void Display() {
 				planeShaderProgram.SetUniform("shininess", planeMaterial.shininess);
 
 				//Pass shadow params				
-				//planeShaderProgram.SetUniformMatrix4("depthBiasMVP", depthMVP.data);
+				planeShaderProgram.SetUniformMatrix4("lightSpaceMatrix", value_ptr(lightSpaceMatrix));
 			}
 
 			//Bind depth buffer
 			{
-				//depthBuffer.BindTexture();
+				depthBuffer.BindTexture();
 			}
 
 			//Draw plane
