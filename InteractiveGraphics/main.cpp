@@ -334,7 +334,7 @@ int main(int argc, char *argv[])
 
 		//Initialize depth buffer
 		{
-			depthBuffer.Initialize(true, WINDOW_WIDTH, WINDOW_HEIGHT, GL_DEPTH_COMPONENT);
+			depthBuffer.Initialize(true, WINDOW_WIDTH, WINDOW_HEIGHT, GL_DEPTH_COMPONENT16);
 			depthBuffer.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR);
 			depthBuffer.SetTextureWrappingMode(GL_MIRRORED_REPEAT, GL_MIRRORED_REPEAT);
 		}
@@ -370,7 +370,7 @@ void Display() {
 		lightUp = normalize(vec3(lightRotationMatrix * vec4(lightUp, 0.0f)));
 		mat4 lightView = lookAt(localLightPosition, vec3(0.0), lightUp);
 		
-		float near_plane = 1.0f, far_plane = 1500.0f;
+		float near_plane = 1.0f, far_plane = 500.0f;
 		float projectionCubeSize = 50.0f;
 		mat4 lightProjection = ortho(-projectionCubeSize, projectionCubeSize, -projectionCubeSize, projectionCubeSize, near_plane, far_plane);		
 

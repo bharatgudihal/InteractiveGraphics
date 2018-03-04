@@ -30,12 +30,12 @@ void main(){
 	float specularity = clamp(dot(halfVector, normal), 0, 1);
 
 	//Check shadow map	
-	float bias = max(0.05 * (1.0 - dot(normal, lightDirection)), 0.005);
+	float bias = max(0.05 * (1.0 - dot(normal, lightDirection)), 0.03);
 	vec3 projectionCoords = shadowCoord.xyz/shadowCoord.w;
 	projectionCoords = projectionCoords * 0.5 + 0.5;
-	float closestDepth = texture(shadowMap, projectionCoords, bias);
+	float closestDepth = texture(shadowMap, projectionCoords);
 	float currentDepth = projectionCoords.z;	
-	float shadow = currentDepth > closestDepth ? 1.0 : 0.0;
+	float shadow = currentDepth - bias > closestDepth ? 1.0 : 0.0;
 	
 	if(projectionCoords.z  > 1.0){
 		shadow = 0.0;
