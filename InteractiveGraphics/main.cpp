@@ -356,17 +356,55 @@ void Display() {
 	//Set clear color
 	glClearColor(color.r, color.g, color.b, color.a);
 
-	vec3 cameraUp(0.0f, 1.0f, 0.0f);
-	vec3 cameraForward(0.0f, 0.0f, -1.0f);
+	vec3 cameraUp(0.0f, 1.0f, 0.0f);	
 	vec3 xAxis(1.0f, 0.0f, 0.0);
 	vec3 yAxis(0.0f, 1.0f, 0.0);
 		
 	mat4 cameraRotationMatrix = eulerAngleXYZ(xCameraRot, yCameraRot, 0.0f);
 	vec3 localCameraPosition = vec3(vec4(cameraPosition, 1.0f) * cameraRotationMatrix);
-	cameraForward = normalize(vec3(cameraRotationMatrix * vec4(cameraForward, 0.0f)));
 	cameraUp = normalize(vec3(cameraRotationMatrix * vec4(cameraUp, 0.0f)));
 
 	mat4 cameraView = lookAt(localCameraPosition, vec3(0.0f), cameraUp);	
+
+	//Draw the shadow scene
+	{
+		vec3 lightUp(0.0f, 1.0f, 0.0f);
+		mat4 lightRotationMatrix = eulerAngleXYZ(xLightRot, yLightRot, 0.0f);
+		vec3 localLightPosition = vec3(vec4(lightPosition, 1.0f) * lightRotationMatrix);
+		lightUp = normalize(vec3(lightRotationMatrix * vec4(lightUp, 0.0f)));
+		mat4 lightView = lookAt(localLightPosition, vec3(0.0), lightUp);
+		
+		float near_plane = 1.0f, far_plane = 100.0f;
+		float projectionCubeSize = 10.0f;
+		glm::mat4 lightProjection = glm::ortho(-projectionCubeSize, projectionCubeSize, -projectionCubeSize, projectionCubeSize, near_plane, far_plane);
+
+		mat4 lightSpaceMatrix = lightProjection * lightView;
+		
+		depthBuffer.Bind();
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		//Draw model	
+		{
+			//Setup matrices for teapot
+			mat4 teapotTranslationMatrix;
+			teapotTranslationMatrix = translate(teapotTranslationMatrix, teapotPosition);
+
+			//Set all shader params for teapot
+			{
+				shadowMapShaderProgram.Bind();
+				shadowMapShaderProgram.SetUniformMatrix4("lightSpaceMatrix", value_ptr(lightSpaceMatrix));
+				shadowMapShaderProgram.SetUniformMatrix4("model", value_ptr(teapotTranslationMatrix));				
+			}
+
+			//Draw teapot
+			{
+				glBindVertexArray(teapotVAO);
+				glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
+			}			
+		}
+
+		depthBuffer.Unbind();
+	}
 
 	//Draw normal scene
 	{
