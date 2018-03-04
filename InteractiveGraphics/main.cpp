@@ -10,6 +10,7 @@
 #include <iostream>
 #include <string>
 #include <math.h>
+#include <glm_includes.h>
 
 struct {
 	float r, g, b, a;
@@ -43,22 +44,21 @@ GLuint teapotVAO, teapotVBO, teapotDiffuseTextureId, teapotSpecularTextureId;
 cyGLSLShader teapotVertexShader, teapotFragmentShader;
 cyGLSLProgram teapotShaderProgram;
 Material teapotMaterial;
-cyMatrix4f teapotTranslationMatrix = cyMatrix4f::MatrixTrans(cyPoint3f(0.0f, 0.0f, 0.0f));
+glm::vec3 teapotPosition(0.0f, 0.0f, 0.0f);
 
 //Camera variables
-cyMatrix4f cameraRotation = cyMatrix4f::MatrixRotationX(0);
-cyMatrix4f cameraTranslation = cyMatrix4f::MatrixTrans(cyPoint3f(0,-8.0f,-70.0f));
+glm::vec3 cameraPosition(0.0f, 0.0f, 70.0f);
 bool isProjection = true;
 float xCameraRot = 0.0f;
 float yCameraRot = 0.0f;
-cyMatrix4f projection = cyMatrix4f::MatrixPerspective(FOV, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE);
+glm::mat4 projection = glm::perspective(FOV, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE);
 
 //Light variables
 cyTriMesh lightMesh;
 GLuint lightVAO, lightVBO;
 cyGLSLShader lightVertexShader, lightFragmentShader;
 cyGLSLProgram lightShaderProgram;
-cyPoint3f lightPosition(0, -8.0f, -30.0f);
+glm::vec3 lightPosition(0, 8.0f, 30.0f);
 bool isLightRotating;
 float xLightRot = 0.0f;
 float yLightRot = 0.0f;
@@ -67,7 +67,7 @@ float yLightRot = 0.0f;
 GLuint planeVAO, planeVBO, planeDiffuseTextureId;
 cyGLSLShader planeVertexShader, planeFragmentShader;
 cyGLSLProgram planeShaderProgram;
-cyPoint3f planePosition = cyPoint3f(0.0f, -8.0f, 0.0f);
+glm::vec3 planePosition(0.0f, -7.0f, 0.0f);
 Material planeMaterial;
 bool isPlaneMoving;
 float xPlaneRot = 0.0f;
@@ -143,7 +143,8 @@ int main(int argc, char *argv[])
 		{
 			teapotMesh.ComputeBoundingBox();
 			//Adjust model to accommodate bounding box at 0,0,0
-			teapotTranslationMatrix.AddTrans((-(teapotMesh.GetBoundMax() + teapotMesh.GetBoundMin()) / 2.0f));
+			cyPoint3f temp = (teapotMesh.GetBoundMax() + teapotMesh.GetBoundMin()) / 2.0f;
+			teapotPosition = -glm::vec3(temp.x, temp.y, temp.z);
 			teapotMesh.ComputeNormals();
 
 			bool hasTextureVertices = teapotMesh.HasTextureVertices();
@@ -350,77 +351,60 @@ int main(int argc, char *argv[])
 
 void Display() {
 
+	using namespace glm;
+
 	//Set clear color
 	glClearColor(color.r, color.g, color.b, color.a);
 
-	cyMatrix4f view = cameraTranslation * cameraRotation;
-
-	//Calculate light position	
-	cyMatrix4f lightViewMatrix = cyMatrix4f::MatrixTrans(lightPosition) * cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot);	
-	cyMatrix4f lightProjectionMatrix = cyMatrix4f::MatrixScale(1 / lightPosition.Length());
-
-	//Draw into depth buffer
-	{		
-		depthBuffer.Bind();
+	vec3 cameraUp(0.0f, 1.0f, 0.0f);
+	vec3 cameraForward(0.0f, 0.0f, -1.0f);
+	vec3 xAxis(1.0f, 0.0f, 0.0);
+	vec3 yAxis(0.0f, 1.0f, 0.0);
 		
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	mat4 cameraRotationMatrix = eulerAngleXYZ(xCameraRot, yCameraRot, 0.0f);
+	vec3 localCameraPosition = vec3(vec4(cameraPosition, 1.0f) * cameraRotationMatrix);
+	cameraForward = normalize(vec3(cameraRotationMatrix * vec4(cameraForward, 0.0f)));
+	cameraUp = normalize(vec3(cameraRotationMatrix * vec4(cameraUp, 0.0f)));
 
-		//Draw model	
-		{
-			//Setup matrices for teapot
-			cyMatrix4f teapotMVP = lightProjectionMatrix * lightViewMatrix * teapotTranslationMatrix;
-
-			//Set all shader params for teapot
-			{
-				shadowMapShaderProgram.Bind();
-				shadowMapShaderProgram.SetUniformMatrix4("mvp", teapotMVP.data);				
-			}
-
-			//Draw teapot
-			{
-				glBindVertexArray(teapotVAO);
-				glDrawArrays(GL_TRIANGLES, 0, teapotMesh.NF() * 3);
-			}
-		}
-
-		depthBuffer.Unbind();
-	}
+	mat4 cameraView = lookAt(localCameraPosition, vec3(0.0f), cameraUp);	
 
 	//Draw normal scene
 	{
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		cyMatrix4f lightModelMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot) * cyMatrix4f::MatrixTrans(lightPosition);
-		cyPoint3f transformedLightPos = (view * lightModelMatrix).GetTrans();		
+		mat4 lightModelMatrix;
+		lightModelMatrix = translate(lightModelMatrix, lightPosition);
+		mat4 lightRotationMatrix = eulerAngleXYZ(xLightRot, yLightRot, 0.0f);
+		vec3 localLightPosition = vec3(vec4(lightPosition, 1.0f) * lightRotationMatrix);
 
 		//Draw model	
 		{
 			//Setup matrices for teapot
-			cyMatrix4f teapotMVP = projection * view * teapotTranslationMatrix;
-			cyMatrix4f teapotMV = view * teapotTranslationMatrix;
-			cyMatrix3f teapotMVNormal = teapotMV.GetInverse().GetTranspose().GetSubMatrix3();
-			cyMatrix4f depthMVP = lightProjectionMatrix * lightViewMatrix * teapotTranslationMatrix;
+			mat4 teapotTranslationMatrix;
+			teapotTranslationMatrix = translate(teapotTranslationMatrix, teapotPosition);
+			
+			//mat4 depthMVP = lightProjectionMatrix * lightViewMatrix * teapotTranslationMatrix;
 
 			//Set all shader params for teapot
 			{
 				teapotShaderProgram.Bind();
-				teapotShaderProgram.SetUniformMatrix4("mvp", teapotMVP.data);
-				teapotShaderProgram.SetUniformMatrix4("mv", teapotMV.data);
-				teapotShaderProgram.SetUniformMatrix3("normalMatrix", teapotMVNormal.data);
-				teapotShaderProgram.SetUniform("lightPosition", transformedLightPos);
-				teapotShaderProgram.SetUniform("cameraPosition", view.GetTrans());
+				teapotShaderProgram.SetUniformMatrix4("model", value_ptr(teapotTranslationMatrix));
+				teapotShaderProgram.SetUniformMatrix4("view", value_ptr(cameraView));
+				teapotShaderProgram.SetUniformMatrix4("projection", value_ptr(projection));
+				teapotShaderProgram.SetUniform("lightPosition", localLightPosition.x, localLightPosition.y, localLightPosition.z);
+				teapotShaderProgram.SetUniform("cameraPosition", localCameraPosition.x, localCameraPosition.y, localCameraPosition.z);
 				teapotShaderProgram.SetUniform("ambient", teapotMaterial.ambient);
 				teapotShaderProgram.SetUniform("diffuse", teapotMaterial.diffuse);
 				teapotShaderProgram.SetUniform("specular", teapotMaterial.specular);
 				teapotShaderProgram.SetUniform("shininess", teapotMaterial.shininess);
 
 				//Pass shadow params				
-				teapotShaderProgram.SetUniformMatrix4("depthBiasMVP", depthMVP.data);
+				//teapotShaderProgram.SetUniformMatrix4("depthBiasMVP", depthMVP.data);
 			}
 
 			//Bind depth buffer
 			{
-				depthBuffer.BindTexture();
+				//depthBuffer.BindTexture();
 			}
 
 			//Draw teapot
@@ -433,32 +417,30 @@ void Display() {
 		//Draw plane
 		{
 			//Setup matrices for plane
-			cyMatrix4f planeModelMatrix = cyMatrix4f::MatrixTrans(planePosition) * cyMatrix4f::MatrixRotationY(yPlaneRot) * cyMatrix4f::MatrixRotationX(xPlaneRot);
-			cyMatrix4f planeMVPMatrix = projection * view * planeModelMatrix;
-			cyMatrix4f planeMVMatrix = view * planeModelMatrix;
-			cyMatrix3f planeMVNormal = planeMVMatrix.GetInverse().GetTranspose().GetSubMatrix3();			
-			cyMatrix4f depthMVP = lightProjectionMatrix * lightViewMatrix * planeModelMatrix;
+			mat4 planeModelMatrix;
+			planeModelMatrix = translate(planeModelMatrix, planePosition);	
+			//cyMatrix4f depthMVP = lightProjectionMatrix * lightViewMatrix * planeModelMatrix;
 
 			//Set shader variables
 			{
 				planeShaderProgram.Bind();
-				planeShaderProgram.SetUniformMatrix4("mvp", planeMVPMatrix.data);
-				planeShaderProgram.SetUniformMatrix4("mv", planeMVMatrix.data);
-				planeShaderProgram.SetUniformMatrix3("normalMatrix", planeMVNormal.data);
-				planeShaderProgram.SetUniform("lightPosition", transformedLightPos);
-				planeShaderProgram.SetUniform("cameraPosition", view.GetTrans());
+				planeShaderProgram.SetUniformMatrix4("model", value_ptr(planeModelMatrix));
+				planeShaderProgram.SetUniformMatrix4("view", value_ptr(cameraView));
+				planeShaderProgram.SetUniformMatrix4("projection", value_ptr(projection));
+				planeShaderProgram.SetUniform("lightPosition", localLightPosition.x, localLightPosition.y, localLightPosition.z);
+				planeShaderProgram.SetUniform("cameraPosition", localCameraPosition.x, localCameraPosition.y, localCameraPosition.z);
 				planeShaderProgram.SetUniform("ambient", planeMaterial.ambient);
 				planeShaderProgram.SetUniform("diffuse", planeMaterial.diffuse);
 				planeShaderProgram.SetUniform("specular", planeMaterial.specular);
 				planeShaderProgram.SetUniform("shininess", planeMaterial.shininess);
 
 				//Pass shadow params				
-				planeShaderProgram.SetUniformMatrix4("depthBiasMVP", depthMVP.data);
+				//planeShaderProgram.SetUniformMatrix4("depthBiasMVP", depthMVP.data);
 			}
 
 			//Bind depth buffer
 			{
-				depthBuffer.BindTexture();
+				//depthBuffer.BindTexture();
 			}
 
 			//Draw plane
@@ -471,13 +453,15 @@ void Display() {
 		//Draw light
 		{
 			//Light matrices
-			cyMatrix4f localLightModelMatrix = cyMatrix4f::MatrixRotationY(yLightRot) * cyMatrix4f::MatrixRotationX(xLightRot) * cyMatrix4f::MatrixTrans(lightPosition);
-			cyMatrix4f lightMVP = projection * view * localLightModelMatrix;
+			mat4 localLightModelMatrix;
+			localLightModelMatrix = translate(localLightModelMatrix, localLightPosition);			
+
+			mat4 lightMVP = projection * cameraView * localLightModelMatrix;
 
 			//Bind shader
 			{
 				lightShaderProgram.Bind();
-				lightShaderProgram.SetUniformMatrix4("mvp", lightMVP.data);
+				lightShaderProgram.SetUniformMatrix4("mvp", value_ptr(lightMVP));
 			}
 
 			//Draw mesh
@@ -567,12 +551,11 @@ void GetMousePosition(int x, int y) {
 			xRot += yDiff;
 			xCameraRot = xRot;
 			yCameraRot = yRot;
-			cameraRotation = cyMatrix4f::MatrixRotationY(yCameraRot) * cyMatrix4f::MatrixRotationX(xCameraRot);
 		}
 	}else {
 		float diff = static_cast<float>(y) - lastRightMousePos;
-		lastRightMousePos = static_cast<float>(y);		
-		cameraTranslation.AddTrans(-cyPoint3f(0.0f, 0.0f, diff));
+		lastRightMousePos = static_cast<float>(y);
+		cameraPosition.z -= diff;
 	}
 }
 
@@ -596,10 +579,10 @@ void CompileShaders() {
 
 void TogglePerspective() {
 	if (isProjection) {
-		projection = cyMatrix4f::MatrixScale( 1 / cameraTranslation.GetTrans().Length());
+		//projection = cyMatrix4f::MatrixScale( 1 / cameraTranslation.GetTrans().Length());
 	}
 	else {
-		projection = cyMatrix4f::MatrixPerspective(FOV, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE);
+		projection = glm::perspective(FOV, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE);
 	}
 	isProjection = !isProjection;
 }

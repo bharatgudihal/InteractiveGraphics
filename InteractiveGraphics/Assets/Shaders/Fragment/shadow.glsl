@@ -12,6 +12,7 @@ uniform vec3 specular;
 uniform float shininess;
 uniform vec3 cameraPosition;
 uniform sampler2DShadow shadowMap;
+uniform mat4 view;
 
 out vec4 FragColor;
 
@@ -23,6 +24,7 @@ void main(){
 	float closestDepth = texture(shadowMap, projectionCoords.xyz);
 	float currentDepth = shadowCoord.z;
 	float shadow = currentDepth > closestDepth ? 1.0 : 0.0;
+	shadow = 0.0;
 
 	vec3 diffuseColor = (1 - shadow) * diffuse;
 	vec3 ambientColor = ambient;
@@ -32,11 +34,11 @@ void main(){
 	vec3 ambientLightColor = vec3(0.2);
 	
 	vec3 normal = normalize(o_normal);
-	
+
 	vec3 lightDirection = normalize(lightPosition - o_position);
 	float inclination = clamp(dot(lightDirection, normal), 0, 1);
 	
-	vec3 cameraDirection = normalize(o_position - cameraPosition);
+	vec3 cameraDirection = normalize(cameraPosition - o_position);
 	vec3 halfVector = normalize(cameraDirection + lightDirection);
 	
 	float specularity = clamp(dot(halfVector, normal), 0, 1);
