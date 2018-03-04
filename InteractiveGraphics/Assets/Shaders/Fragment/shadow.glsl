@@ -33,10 +33,13 @@ void main(){
 	float bias = max(0.05 * (1.0 - dot(normal, lightDirection)), 0.005);
 	vec3 projectionCoords = shadowCoord.xyz/shadowCoord.w;
 	projectionCoords = projectionCoords * 0.5 + 0.5;
-	float closestDepth = texture(shadowMap, projectionCoords);
+	float closestDepth = texture(shadowMap, projectionCoords, bias);
 	float currentDepth = projectionCoords.z;	
-	float shadow = currentDepth - bias > closestDepth ? 1.0 : 0.0;
-	//shadow = 0.0;
+	float shadow = currentDepth > closestDepth ? 1.0 : 0.0;
+	
+	if(projectionCoords.z  > 1.0){
+		shadow = 0.0;
+	}
 
 	vec3 diffuseColor = diffuse;
 	vec3 ambientColor = ambient;

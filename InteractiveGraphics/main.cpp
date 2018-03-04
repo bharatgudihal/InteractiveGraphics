@@ -67,7 +67,7 @@ float yLightRot = 0.0f;
 GLuint planeVAO, planeVBO, planeDiffuseTextureId;
 cyGLSLShader planeVertexShader, planeFragmentShader;
 cyGLSLProgram planeShaderProgram;
-glm::vec3 planePosition(0.0f, -7.0f, 0.0f);
+glm::vec3 planePosition(0.0f, -8.0f, 0.0f);
 Material planeMaterial;
 bool isPlaneMoving;
 float xPlaneRot = 0.0f;
@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
 		glutSpecialFunc(GetKeySpecial);
 		glutSpecialUpFunc(GetKeyUpSpecial);
 		glEnable(GL_DEPTH_TEST);
-		glEnable(GL_TEXTURE_2D);		
+		glEnable(GL_TEXTURE_2D);
 		glewInit();
 	}
 		
@@ -335,10 +335,8 @@ int main(int argc, char *argv[])
 		//Initialize depth buffer
 		{
 			depthBuffer.Initialize(true, WINDOW_WIDTH, WINDOW_HEIGHT, GL_DEPTH_COMPONENT);
-			depthBuffer.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
+			depthBuffer.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR);
 			depthBuffer.SetTextureWrappingMode(GL_MIRRORED_REPEAT, GL_MIRRORED_REPEAT);
-			//depthBuffer.SetTextureMaxAnisotropy();
-			depthBuffer.BuildTextureMipmaps();
 		}
 
 		CompileShaders();
@@ -353,7 +351,7 @@ int main(int argc, char *argv[])
 
 void Display() {
 
-	using namespace glm;
+	using namespace glm;	
 
 	vec3 cameraUp(0.0f, 1.0f, 0.0f);
 	mat4 cameraRotationMatrix = eulerAngleXYZ(xCameraRot, yCameraRot, 0.0f);
@@ -372,7 +370,7 @@ void Display() {
 		lightUp = normalize(vec3(lightRotationMatrix * vec4(lightUp, 0.0f)));
 		mat4 lightView = lookAt(localLightPosition, vec3(0.0), lightUp);
 		
-		float near_plane = 1.0f, far_plane = 200.0f;
+		float near_plane = 1.0f, far_plane = 1500.0f;
 		float projectionCubeSize = 50.0f;
 		mat4 lightProjection = ortho(-projectionCubeSize, projectionCubeSize, -projectionCubeSize, projectionCubeSize, near_plane, far_plane);		
 
