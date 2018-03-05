@@ -334,7 +334,7 @@ int main(int argc, char *argv[])
 
 		//Initialize depth buffer
 		{
-			depthBuffer.Initialize(true, WINDOW_WIDTH, WINDOW_HEIGHT, GL_DEPTH_COMPONENT16);
+			depthBuffer.Initialize(true, 4096, 4096, GL_DEPTH_COMPONENT16);
 			depthBuffer.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR);
 			depthBuffer.SetTextureWrappingMode(GL_MIRRORED_REPEAT, GL_MIRRORED_REPEAT);
 		}
